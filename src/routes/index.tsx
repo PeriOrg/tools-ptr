@@ -160,7 +160,7 @@ function PollingTool() {
       nation_name: selectedNation.name,
       label,
       date: pollDate,
-      source: source.trim() || undefined,
+      source: marginError.trim() ? `±${marginError.trim()}%` : undefined,
       values,
       parties: parties.map((p) => ({ id: p.id, abbreviation: p.abbreviation, name: p.name, color: safeColor(p.color) })),
     };
