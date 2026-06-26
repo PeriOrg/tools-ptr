@@ -219,25 +219,43 @@ function PollingTool() {
             <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
               Poll date
             </label>
-            <input
-              type="date"
-              value={pollDate}
-              onChange={(e) => setPollDate(e.target.value)}
-              className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+            <div className="flex gap-2">
+              <select
+                value={pollMonth}
+                onChange={(e) => setPollMonth(Number(e.target.value))}
+                className="flex-1 h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"].map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
+                ))}
+              </select>
+              <input
+                type="number"
+                inputMode="numeric"
+                value={pollYear}
+                onChange={(e) => setPollYear(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+                className="w-24 h-10 rounded-md border border-input bg-background px-3 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="Year"
+              />
+            </div>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
-              Sample size / source
+              Margin of error
             </label>
-            <input
-              type="text"
-              value={source}
-              onChange={(e) => setSource(e.target.value)}
-              placeholder="e.g. n=1,500 — PTR Polling"
-              className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+            <div className="relative">
+              <input
+                type="number"
+                step="0.1"
+                min="0"
+                value={marginError}
+                onChange={(e) => setMarginError(e.target.value)}
+                placeholder="e.g. 2.5"
+                className="w-full h-10 rounded-md border border-input bg-background px-3 pr-8 text-sm tabular-nums placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground pointer-events-none">%</span>
+            </div>
           </div>
         </section>
 
