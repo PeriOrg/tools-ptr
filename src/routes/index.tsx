@@ -64,8 +64,11 @@ function PollingTool() {
 
   const [polls, setPolls] = useState<Record<number, string>>({});
   const [mode, setMode] = useState<"poll" | "seats">("poll");
-  const [pollDate, setPollDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [source, setSource] = useState<string>("");
+  const now = new Date();
+  const [pollMonth, setPollMonth] = useState<number>(now.getMonth() + 1);
+  const [pollYear, setPollYear] = useState<string>(String(now.getFullYear()));
+  const [marginError, setMarginError] = useState<string>("");
+  const pollDate = `${pollYear.padStart(4, "0")}-${String(pollMonth).padStart(2, "0")}`;
   const [snapName, setSnapName] = useState<string>("");
 
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
