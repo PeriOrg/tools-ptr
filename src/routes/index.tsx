@@ -635,6 +635,7 @@ function BarChart({
                         left: "52%",
                         right: "10%",
                         backgroundColor: light,
+                        border: `1px solid ${borderForColor(light)}`,
                       }}
                     >
                       <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 italic text-[9px] text-muted-foreground tabular-nums whitespace-nowrap">
