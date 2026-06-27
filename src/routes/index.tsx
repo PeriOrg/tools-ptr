@@ -171,11 +171,18 @@ function PollingTool() {
 
   const maxValue =
     mode === "poll"
-      ? Math.max(50, ...rows.map((r) => r.support_pct))
+      ? Math.max(
+          50,
+          ...rows.map((r) => r.support_pct),
+          ...(showPrevious ? rows.map((r) => r.election_support_pct ?? 0) : []),
+        )
       : poll && poll.total_seats > 0
         ? Math.max(
             50,
             ...rows.map((r) => ((r.projected_seats || 0) / poll.total_seats) * 100),
+            ...(showPrevious
+              ? rows.map((r) => ((r.election_seats ?? 0) / poll.total_seats) * 100)
+              : []),
           )
         : 50;
 
