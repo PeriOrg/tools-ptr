@@ -73,6 +73,30 @@ async function jget<T>(path: string): Promise<T> {
   return r.json();
 }
 
+function dHondt(
+  parties: { id: number; votes: number }[],
+  seats: number,
+): Map<number, number> {
+  const result = new Map<number, number>();
+  for (const p of parties) result.set(p.id, 0);
+  if (seats <= 0 || parties.length === 0) return result;
+  const totalVotes = parties.reduce((s, p) => s + p.votes, 0);
+  if (totalVotes <= 0) return result;
+  for (let i = 0; i < seats; i++) {
+    let bestId = parties[0].id;
+    let bestQ = -1;
+    for (const p of parties) {
+      const q = p.votes / ((result.get(p.id) ?? 0) + 1);
+      if (q > bestQ) {
+        bestQ = q;
+        bestId = p.id;
+      }
+    }
+    result.set(bestId, (result.get(bestId) ?? 0) + 1);
+  }
+  return result;
+}
+
 function PollingTool() {
   const [nations, setNations] = useState<Nation[] | null>(null);
   const [nationsErr, setNationsErr] = useState<string | null>(null);
@@ -87,8 +111,13 @@ function PollingTool() {
   const [pollErr, setPollErr] = useState<string | null>(null);
   const [pollLoading, setPollLoading] = useState(false);
 
-  const [mode, setMode] = useState<"poll" | "seats">("poll");
+  const [mode, setMode] = useState<"poll" | "seats" | "estimate">("poll");
   const [showPrevious, setShowPrevious] = useState(true);
+
+  const [estTotalSeats, setEstTotalSeats] = useState<number>(449);
+  const [estThreshold, setEstThreshold] = useState<number>(3.0);
+  
+
 
   // Timeline: cache of fetched poll details for current nation, for trend line
   const [timeline, setTimeline] = useState<PollDetail[]>([]);
@@ -124,6 +153,17 @@ function PollingTool() {
         setPollsErr(String(e.message || e));
         setPollsLoading(false);
       });
+  }, [nationId]);
+
+  // Election dashboard defaults for "Estimate parliament" mode
+  useEffect(() => {
+    if (nationId == null) return;
+    jget<{ total_seats: number; threshold_pct: number }>(`/nations/${nationId}/elections/dashboard`)
+      .then((d) => {
+        if (typeof d.total_seats === "number") setEstTotalSeats(d.total_seats);
+        if (typeof d.threshold_pct === "number") setEstThreshold(d.threshold_pct);
+      })
+      .catch(() => {});
   }, [nationId]);
 
   // Selected poll detail
@@ -162,12 +202,36 @@ function PollingTool() {
 
   const selectedNation = nations?.find((n) => n.id === nationId) ?? null;
 
+  // D'Hondt estimate based on current poll + user-set total seats & threshold
+  const estimate = useMemo(() => {
+    if (!poll) return null;
+    const eligible = poll.parties.filter((p) => p.support_pct >= estThreshold);
+    const seatMap = dHondt(
+      eligible.map((p) => ({ id: p.party_id, votes: p.support_pct })),
+      Math.max(0, Math.floor(estTotalSeats)),
+    );
+    return { seatMap, eligibleCount: eligible.length };
+  }, [poll, estThreshold, estTotalSeats]);
+
   const rows = useMemo(() => {
     if (!poll) return [];
-    return [...poll.parties].sort((a, b) =>
-      mode === "poll" ? b.support_pct - a.support_pct : b.projected_seats - a.projected_seats,
-    );
-  }, [poll, mode]);
+    const parties = poll.parties;
+    if (mode === "poll") {
+      return [...parties].sort((a, b) => b.support_pct - a.support_pct);
+    }
+    if (mode === "seats") {
+      return [...parties].sort((a, b) => b.projected_seats - a.projected_seats);
+    }
+    // estimate: replace projected_seats with D'Hondt allocation
+    const sm = estimate?.seatMap ?? new Map<number, number>();
+    return parties
+      .map((p) => ({ ...p, projected_seats: sm.get(p.party_id) ?? 0 }))
+      .sort((a, b) => b.projected_seats - a.projected_seats);
+  }, [poll, mode, estimate]);
+
+  const effectiveTotalSeats =
+    mode === "estimate" ? Math.max(1, Math.floor(estTotalSeats)) : poll?.total_seats ?? 0;
+  const effectiveShowPrevious = mode === "estimate" ? false : showPrevious;
 
   const maxValue =
     mode === "poll"
@@ -176,15 +240,16 @@ function PollingTool() {
           ...rows.map((r) => r.support_pct),
           ...(showPrevious ? rows.map((r) => r.election_support_pct ?? 0) : []),
         )
-      : poll && poll.total_seats > 0
+      : effectiveTotalSeats > 0
         ? Math.max(
             50,
-            ...rows.map((r) => ((r.projected_seats || 0) / poll.total_seats) * 100),
-            ...(showPrevious
-              ? rows.map((r) => ((r.election_seats ?? 0) / poll.total_seats) * 100)
+            ...rows.map((r) => ((r.projected_seats || 0) / effectiveTotalSeats) * 100),
+            ...(effectiveShowPrevious
+              ? rows.map((r) => ((r.election_seats ?? 0) / effectiveTotalSeats) * 100)
               : []),
           )
         : 50;
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -254,7 +319,7 @@ function PollingTool() {
           <section className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
               <div className="inline-flex rounded-md border border-border p-0.5 bg-secondary">
-                {(["poll", "seats"] as const).map((m) => (
+                {(["poll", "seats", "estimate"] as const).map((m) => (
                   <button
                     key={m}
                     onClick={() => setMode(m)}
@@ -262,19 +327,48 @@ function PollingTool() {
                       mode === m ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {m === "poll" ? "Voting intention" : "Projected seats"}
+                    {m === "poll" ? "Voting intention" : m === "seats" ? "Projected seats" : "Estimate parliament"}
                   </button>
                 ))}
               </div>
-              <label className="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 accent-foreground cursor-pointer"
-                  checked={showPrevious}
-                  onChange={(e) => setShowPrevious(e.target.checked)}
-                />
-                Show previous election
-              </label>
+              {mode !== "estimate" && (
+                <label className="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-foreground cursor-pointer"
+                    checked={showPrevious}
+                    onChange={(e) => setShowPrevious(e.target.checked)}
+                  />
+                  Show previous election
+                </label>
+              )}
+              {mode === "estimate" && (
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <label className="inline-flex items-center gap-1.5">
+                    <span className="text-muted-foreground">Total seats</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={estTotalSeats}
+                      onChange={(e) => setEstTotalSeats(Number(e.target.value) || 0)}
+                      className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </label>
+                  <label className="inline-flex items-center gap-1.5">
+                    <span className="text-muted-foreground">Threshold</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={estThreshold}
+                      onChange={(e) => setEstThreshold(Number(e.target.value) || 0)}
+                      className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <span className="text-muted-foreground">%</span>
+                  </label>
+                </div>
+              )}
             </div>
             <div className="text-xs text-muted-foreground">
               {poll.allocation_method} · {poll.total_seats} seats
@@ -293,11 +387,33 @@ function PollingTool() {
           <div className="space-y-6">
             <div className="flex items-baseline justify-between">
               <h2 className="text-sm font-semibold">
-                {selectedNation?.name} — {mode === "poll" ? "Voting intention" : "Projected seats"}
+                {selectedNation?.name} —{" "}
+                {mode === "poll"
+                  ? "Voting intention"
+                  : mode === "seats"
+                    ? "Projected seats"
+                    : "Estimate parliament"}
               </h2>
               <span className="text-xs text-muted-foreground">{poll.game_month}</span>
             </div>
-            <BarChart rows={rows} mode={mode} maxValue={maxValue} totalSeats={poll.total_seats} showPrevious={showPrevious} />
+            {mode === "estimate" && (
+              <p className="text-xs text-muted-foreground italic">
+                Estimated seats based on current poll at {estThreshold}% threshold,{" "}
+                {Math.max(1, Math.floor(estTotalSeats))} seats — not an official projection.
+              </p>
+            )}
+            {mode === "estimate" && estimate && estimate.eligibleCount === 0 ? (
+              <EmptyState message="No party would win seats — every party is below the threshold." />
+            ) : (
+              <BarChart
+                rows={rows}
+                mode={mode === "estimate" ? "seats" : mode}
+                maxValue={maxValue}
+                totalSeats={effectiveTotalSeats}
+                showPrevious={effectiveShowPrevious}
+              />
+            )}
+
 
             <div>
               <h2 className="text-sm font-semibold mb-3">Detail</h2>
