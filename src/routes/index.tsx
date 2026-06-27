@@ -67,6 +67,20 @@ function pickTextColor(hex: string) {
   const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return luma > 0.65 ? "#1a1a1a" : "#ffffff";
 }
+function colorLuma(hex: string) {
+  const c = hex.replace("#", "");
+  const full = c.length === 3 ? c.split("").map((x) => x + x).join("") : c;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+function isNearWhite(hex: string) {
+  return colorLuma(hex) > 0.92;
+}
+function borderForColor(hex: string) {
+  return isNearWhite(hex) ? "#cbd5e1" : "transparent";
+}
 
 async function jget<T>(path: string): Promise<T> {
   const r = await fetch(`${API}${path}`);
@@ -621,6 +635,7 @@ function BarChart({
                         left: "52%",
                         right: "10%",
                         backgroundColor: light,
+                        border: `1px solid ${borderForColor(light)}`,
                       }}
                     >
                       <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 italic text-[9px] text-muted-foreground tabular-nums whitespace-nowrap">
@@ -637,6 +652,7 @@ function BarChart({
                         left: "10%",
                         right: showPrevious && prevRaw != null ? "48%" : "10%",
                         backgroundColor: color,
+                        border: `1px solid ${borderForColor(color)}`,
                       }}
                     >
                       <span className="absolute -top-4 left-1/2 -translate-x-1/2 font-bold text-[10px] tabular-nums whitespace-nowrap text-foreground">
@@ -661,7 +677,7 @@ function BarChart({
               >
                 <span
                   className="h-1 w-6 rounded-full"
-                  style={{ backgroundColor: color }}
+                  style={{ backgroundColor: color, boxShadow: isNearWhite(color) ? "inset 0 0 0 1px #cbd5e1" : undefined }}
                 />
                 <span className="text-[10px] font-medium truncate max-w-full">
                   {p.abbreviation}
@@ -733,13 +749,17 @@ function TimelineChart({ polls }: { polls: PollDetail[] }) {
               })
               .filter(Boolean)
               .join(" ");
+            const nearWhite = isNearWhite(info.color);
             return (
               <g key={pid}>
+                {nearWhite && (
+                  <polyline points={pts} fill="none" stroke="#cbd5e1" strokeWidth={3.5} strokeLinejoin="round" strokeLinecap="round" />
+                )}
                 <polyline points={pts} fill="none" stroke={info.color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
                 {polls.map((s, i) => {
                   const pp = s.parties.find((x) => x.party_id === pid);
                   if (!pp) return null;
-                  return <circle key={i} cx={xPos(i)} cy={yPos(pp.support_pct)} r={2.5} fill={info.color} />;
+                  return <circle key={i} cx={xPos(i)} cy={yPos(pp.support_pct)} r={2.5} fill={info.color} stroke={nearWhite ? "#94a3b8" : "none"} strokeWidth={nearWhite ? 0.75 : 0} />;
                 })}
               </g>
             );
