@@ -88,6 +88,7 @@ function PollingTool() {
   const [pollLoading, setPollLoading] = useState(false);
 
   const [mode, setMode] = useState<"poll" | "seats">("poll");
+  const [showPrevious, setShowPrevious] = useState(true);
 
   // Timeline: cache of fetched poll details for current nation, for trend line
   const [timeline, setTimeline] = useState<PollDetail[]>([]);
