@@ -77,13 +77,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "PTR Tools" },
+      { title: "PR:R Tools" },
       { name: "description", content: "Set of tools for PT:R" },
-      { property: "og:title", content: "PTR Tools" },
+      { property: "og:title", content: "PR:R Tools" },
       { property: "og:description", content: "Set of tools for PT:R" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "PTR Tools" },
+      { name: "twitter:title", content: "PR:R Tools" },
       { name: "twitter:description", content: "Set of tools for PT:R" },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/67c0d378-ba1f-4330-9ad6-bc22ad0c53b8/id-preview-72e66e07--6c00a686-2508-4902-aede-a739dd2a6e4f.lovable.app-1782560779500.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/67c0d378-ba1f-4330-9ad6-bc22ad0c53b8/id-preview-72e66e07--6c00a686-2508-4902-aede-a739dd2a6e4f.lovable.app-1782560779500.png" },
@@ -120,6 +120,28 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
+      <nav className="border-b border-border bg-card">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 flex items-center gap-1 h-12">
+          <span className="text-sm font-semibold tracking-tight text-foreground mr-4">PR:R Tools</span>
+          <Link
+            to="/"
+            activeOptions={{ exact: true }}
+            activeProps={{ className: "text-foreground border-foreground" }}
+            inactiveProps={{ className: "text-muted-foreground border-transparent hover:text-foreground" }}
+            className="text-xs font-medium px-3 h-12 inline-flex items-center border-b-2 transition-colors"
+          >
+            Polling
+          </Link>
+          <Link
+            to="/majority"
+            activeProps={{ className: "text-foreground border-foreground" }}
+            inactiveProps={{ className: "text-muted-foreground border-transparent hover:text-foreground" }}
+            className="text-xs font-medium px-3 h-12 inline-flex items-center border-b-2 transition-colors"
+          >
+            Majority calculator
+          </Link>
+        </div>
+      </nav>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
       <Outlet />
     </QueryClientProvider>
