@@ -321,7 +321,7 @@ function PollingTool() {
           <section className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-3">
               <div className="inline-flex rounded-md border border-border p-0.5 bg-secondary">
-                {(["poll", "seats"] as const).map((m) => (
+                {(["poll", "seats", "estimate"] as const).map((m) => (
                   <button
                     key={m}
                     onClick={() => setMode(m)}
@@ -329,19 +329,48 @@ function PollingTool() {
                       mode === m ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {m === "poll" ? "Voting intention" : "Projected seats"}
+                    {m === "poll" ? "Voting intention" : m === "seats" ? "Projected seats" : "Estimate parliament"}
                   </button>
                 ))}
               </div>
-              <label className="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="h-3.5 w-3.5 accent-foreground cursor-pointer"
-                  checked={showPrevious}
-                  onChange={(e) => setShowPrevious(e.target.checked)}
-                />
-                Show previous election
-              </label>
+              {mode !== "estimate" && (
+                <label className="inline-flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-foreground cursor-pointer"
+                    checked={showPrevious}
+                    onChange={(e) => setShowPrevious(e.target.checked)}
+                  />
+                  Show previous election
+                </label>
+              )}
+              {mode === "estimate" && (
+                <div className="flex flex-wrap items-center gap-3 text-xs">
+                  <label className="inline-flex items-center gap-1.5">
+                    <span className="text-muted-foreground">Total seats</span>
+                    <input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={estTotalSeats}
+                      onChange={(e) => setEstTotalSeats(Number(e.target.value) || 0)}
+                      className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </label>
+                  <label className="inline-flex items-center gap-1.5">
+                    <span className="text-muted-foreground">Threshold</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.1}
+                      value={estThreshold}
+                      onChange={(e) => setEstThreshold(Number(e.target.value) || 0)}
+                      className="h-8 w-20 rounded-md border border-input bg-background px-2 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <span className="text-muted-foreground">%</span>
+                  </label>
+                </div>
+              )}
             </div>
             <div className="text-xs text-muted-foreground">
               {poll.allocation_method} · {poll.total_seats} seats
@@ -360,11 +389,33 @@ function PollingTool() {
           <div className="space-y-6">
             <div className="flex items-baseline justify-between">
               <h2 className="text-sm font-semibold">
-                {selectedNation?.name} — {mode === "poll" ? "Voting intention" : "Projected seats"}
+                {selectedNation?.name} —{" "}
+                {mode === "poll"
+                  ? "Voting intention"
+                  : mode === "seats"
+                    ? "Projected seats"
+                    : "Estimate parliament"}
               </h2>
               <span className="text-xs text-muted-foreground">{poll.game_month}</span>
             </div>
-            <BarChart rows={rows} mode={mode} maxValue={maxValue} totalSeats={poll.total_seats} showPrevious={showPrevious} />
+            {mode === "estimate" && (
+              <p className="text-xs text-muted-foreground italic">
+                Estimated seats based on current poll at {estThreshold}% threshold,{" "}
+                {Math.max(1, Math.floor(estTotalSeats))} seats — not an official projection.
+              </p>
+            )}
+            {mode === "estimate" && estimate && estimate.eligibleCount === 0 ? (
+              <EmptyState message="No party would win seats — every party is below the threshold." />
+            ) : (
+              <BarChart
+                rows={rows}
+                mode={mode === "estimate" ? "seats" : mode}
+                maxValue={maxValue}
+                totalSeats={effectiveTotalSeats}
+                showPrevious={effectiveShowPrevious}
+              />
+            )}
+
 
             <div>
               <h2 className="text-sm font-semibold mb-3">Detail</h2>
