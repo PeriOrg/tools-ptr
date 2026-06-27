@@ -297,7 +297,7 @@ function PollingTool() {
               </h2>
               <span className="text-xs text-muted-foreground">{poll.game_month}</span>
             </div>
-            <BarChart rows={rows} mode={mode} maxValue={maxValue} totalSeats={poll.total_seats} />
+            <BarChart rows={rows} mode={mode} maxValue={maxValue} totalSeats={poll.total_seats} showPrevious={showPrevious} />
 
             <div>
               <h2 className="text-sm font-semibold mb-3">Detail</h2>
