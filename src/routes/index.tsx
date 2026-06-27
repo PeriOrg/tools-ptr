@@ -67,6 +67,20 @@ function pickTextColor(hex: string) {
   const luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
   return luma > 0.65 ? "#1a1a1a" : "#ffffff";
 }
+function colorLuma(hex: string) {
+  const c = hex.replace("#", "");
+  const full = c.length === 3 ? c.split("").map((x) => x + x).join("") : c;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+}
+function isNearWhite(hex: string) {
+  return colorLuma(hex) > 0.92;
+}
+function borderForColor(hex: string) {
+  return isNearWhite(hex) ? "#cbd5e1" : "transparent";
+}
 
 async function jget<T>(path: string): Promise<T> {
   const r = await fetch(`${API}${path}`);
