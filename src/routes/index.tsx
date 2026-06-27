@@ -677,7 +677,7 @@ function BarChart({
               >
                 <span
                   className="h-1 w-6 rounded-full"
-                  style={{ backgroundColor: color }}
+                  style={{ backgroundColor: color, boxShadow: isNearWhite(color) ? "inset 0 0 0 1px #cbd5e1" : undefined }}
                 />
                 <span className="text-[10px] font-medium truncate max-w-full">
                   {p.abbreviation}
