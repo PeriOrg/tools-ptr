@@ -268,17 +268,13 @@ function PollingTool() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border">
-        <div className="mx-auto max-w-6xl px-6 py-5 flex items-baseline justify-between">
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">PTR Tools</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Fictional election polling visualiser</p>
-          </div>
-          <nav className="text-xs text-muted-foreground">Polling</nav>
-        </div>
-      </header>
-
       <main className="mx-auto max-w-6xl px-6 py-8 space-y-8">
+        <header className="space-y-1">
+          <h1 className="text-2xl font-bold tracking-tight">Polling</h1>
+          <p className="text-sm text-muted-foreground">
+            Visualise fictional election polls and compare with previous results.
+          </p>
+        </header>
         <section className="grid gap-4 md:grid-cols-2">
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
