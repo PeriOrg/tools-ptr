@@ -15,7 +15,7 @@ const API = "/api/ptr";
 const FALLBACK_COLOR = "#999999";
 
 type Nation = { id: number; name: string };
-type Party = { id: number; abbreviation: string; name: string; color: string | null };
+type Party = { id: number; abbreviation: string; name: string; color: string | null; logo_url: string | null };
 type DashboardParty = {
   party_id: number;
   party_name: string;
@@ -96,6 +96,12 @@ function MajorityTool() {
   const abbrMap = useMemo(() => {
     const m = new Map<number, string>();
     for (const p of parties) m.set(p.id, p.abbreviation);
+    return m;
+  }, [parties]);
+
+  const logoMap = useMemo(() => {
+    const m = new Map<number, string | null>();
+    for (const p of parties) m.set(p.id, p.logo_url ?? null);
     return m;
   }, [parties]);
 
@@ -246,14 +252,14 @@ function MajorityTool() {
             </section>
 
             {/* Party list */}
-            <section className="rounded-lg border border-border bg-card overflow-hidden">
+            <section className="overflow-hidden rounded-lg border border-border">
               <table className="w-full text-sm">
-                <thead className="bg-secondary/40 text-xs text-muted-foreground">
+                <thead className="bg-secondary text-muted-foreground text-xs uppercase tracking-wide">
                   <tr>
-                    <th className="text-left font-medium px-2 py-2 w-8"></th>
-                    <th className="text-left font-medium px-2 py-2">Party</th>
-                    <th className="text-right font-medium px-3 py-2 w-20">Seats</th>
-                    <th className="text-right font-medium px-3 py-2 w-20">% chamber</th>
+                    <th className="text-left font-medium px-3 py-2"></th>
+                    <th className="text-left font-medium px-3 py-2">Party</th>
+                    <th className="text-right font-medium px-3 py-2">Seats</th>
+                    <th className="text-right font-medium px-3 py-2">% chamber</th>
                     <th className="text-center font-medium px-3 py-2 w-72">Vote</th>
                   </tr>
                 </thead>
@@ -261,20 +267,30 @@ function MajorityTool() {
                   {seatedParties.map((p) => {
                     const color = safeColor(p.color);
                     const abbr = abbrMap.get(p.party_id);
+                    const logo = logoMap.get(p.party_id);
                     const v = votes.get(p.party_id);
                     return (
                       <tr key={p.party_id} className="border-t border-border">
-                        <td className="px-2 py-2">
-                          <span
-                            className="inline-block h-4 w-4 rounded-sm"
-                            style={{ backgroundColor: color, border: `1px solid ${borderForColor(color)}` }}
-                          />
-                        </td>
-                        <td className="px-2 py-2 min-w-0">
-                          <div className="flex items-baseline gap-2 min-w-0">
-                            {abbr && <span className="font-semibold">{abbr}</span>}
-                            <span className="text-muted-foreground text-xs truncate">{p.party_name}</span>
+                        <td className="px-3 py-2">
+                          <div
+                            className="h-5 w-5 rounded-[3px] flex items-center justify-center overflow-hidden shrink-0 p-0.5"
+                            style={{
+                              backgroundColor: color,
+                              border: `1.5px solid ${borderForColor(color)}`,
+                            }}
+                          >
+                            {logo ? (
+                              <img
+                                src={logo}
+                                alt=""
+                                className="h-full w-full object-contain"
+                              />
+                            ) : null}
                           </div>
+                        </td>
+                        <td className="px-3 py-2 min-w-0">
+                          <div className="font-medium">{abbr ?? p.party_id}</div>
+                          <div className="text-xs text-muted-foreground truncate max-w-[18rem]">{p.party_name}</div>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums font-medium">{p.seats}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
