@@ -138,6 +138,9 @@ function PollingTool() {
   const [timeline, setTimeline] = useState<PollDetail[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
 
+  // Party logos for the selected nation
+  const [partyLogos, setPartyLogos] = useState<Map<number, string | null>>(new Map());
+
   // Nations
   useEffect(() => {
     jget<Nation[]>("/nations")
@@ -147,6 +150,24 @@ function PollingTool() {
       })
       .catch((e) => setNationsErr(String(e.message || e)));
   }, []);
+
+  // Party logos when nation changes
+  useEffect(() => {
+    if (nationId == null) {
+      setPartyLogos(new Map());
+      return;
+    }
+    jget<Array<{ id: number; logo_url: string | null }>>(
+      `/parties?nation_id=${nationId}&active_only=true`,
+    )
+      .then((d) => {
+        const m = new Map<number, string | null>();
+        for (const p of d) m.set(p.id, p.logo_url ?? null);
+        setPartyLogos(m);
+      })
+      .catch(() => setPartyLogos(new Map()));
+  }, [nationId]);
+
 
   // Polls list when nation changes
   useEffect(() => {
@@ -458,8 +479,20 @@ function PollingTool() {
                       return (
                         <tr key={p.party_id} className="border-t border-border">
                           <td className="px-3 py-2">
-                            <span className="inline-block h-3 w-3 rounded-sm border border-border" style={{ backgroundColor: safeColor(p.color) }} />
+                            {partyLogos.get(p.party_id) ? (
+                              <img
+                                src={partyLogos.get(p.party_id) as string}
+                                alt=""
+                                className="h-5 w-5 rounded-full object-cover bg-white border border-border"
+                              />
+                            ) : (
+                              <span
+                                className="inline-block h-3 w-3 rounded-sm border border-border"
+                                style={{ backgroundColor: safeColor(p.color) }}
+                              />
+                            )}
                           </td>
+
                           <td className="px-3 py-2">
                             <div className="font-medium">{p.abbreviation}</div>
                             <div className="text-xs text-muted-foreground truncate max-w-[18rem]">{p.party_name}</div>
