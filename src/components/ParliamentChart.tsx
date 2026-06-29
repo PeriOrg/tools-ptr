@@ -19,14 +19,9 @@ type Props = {
 };
 
 function orderForHemicycle(parties: ParliamentSeat[]): ParliamentSeat[] {
-  const sorted = [...parties].sort((a, b) => b.seats - a.seats);
-  const left: ParliamentSeat[] = [];
-  const right: ParliamentSeat[] = [];
-  sorted.forEach((p, i) => {
-    if (i % 2 === 0) right.push(p);
-    else left.push(p);
-  });
-  return [...left.reverse(), ...right];
+  // Seat dots are filled from left to right, so present parties strictly from
+  // biggest to smallest so the diagram reads as a descending ranking.
+  return [...parties].filter((p) => p.seats > 0).sort((a, b) => b.seats - a.seats);
 }
 
 // Auto-fit: pick section count and geometry so the hemicycle fills the
