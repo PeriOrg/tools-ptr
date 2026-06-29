@@ -99,6 +99,12 @@ function MajorityTool() {
     return m;
   }, [parties]);
 
+  const logoMap = useMemo(() => {
+    const m = new Map<number, string | null>();
+    for (const p of parties) m.set(p.id, p.logo_url ?? null);
+    return m;
+  }, [parties]);
+
   const seatedParties = useMemo(() => {
     if (!dashboard) return [];
     return dashboard.party_results
