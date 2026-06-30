@@ -229,7 +229,7 @@ function PollingTool() {
     };
   }, [nationId, polls]);
 
-  const selectedNation = nations?.find((n) => n.id === nationId) ?? null;
+  
 
   // D'Hondt estimate based on current poll + user-set total seats & threshold
   const estimate = useMemo(() => {
@@ -289,28 +289,8 @@ function PollingTool() {
             Visualise fictional election polls and compare with previous results.
           </p>
         </header>
-        <section className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
-              Nation
-            </label>
-            {nationsErr ? (
-              <div className="text-sm text-destructive">Failed to load nations: {nationsErr}</div>
-            ) : !nations ? (
-              <div className="text-sm text-muted-foreground">Loading nations…</div>
-            ) : (
-              <select
-                className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                value={nationId ?? ""}
-                onChange={(e) => setNationId(e.target.value ? Number(e.target.value) : null)}
-              >
-                <option value="">Select a nation…</option>
-                {nations.map((n) => (
-                  <option key={n.id} value={n.id}>{n.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
+        <section className="grid gap-4 md:grid-cols-1">
+
 
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1.5 uppercase tracking-wide">
