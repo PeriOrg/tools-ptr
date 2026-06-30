@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { ParliamentChart } from "@/components/ParliamentChart";
+import { useNation } from "@/lib/nation-context";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -113,9 +114,9 @@ function dHondt(
 }
 
 function PollingTool() {
-  const [nations, setNations] = useState<Nation[] | null>(null);
-  const [nationsErr, setNationsErr] = useState<string | null>(null);
-  const [nationId, setNationId] = useState<number | null>(null);
+  const { nationId, selectedNation } = useNation();
+
+
 
   const [polls, setPolls] = useState<PollListItem[] | null>(null);
   const [pollsErr, setPollsErr] = useState<string | null>(null);
