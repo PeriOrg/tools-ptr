@@ -57,10 +57,9 @@ function HomePage() {
       <header className="mb-10">
         <h1 className="text-3xl font-semibold tracking-tight text-foreground">PR:R Tools</h1>
         <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          A small collection of tools for the PR:R (Politics &amp; Roleplay) universe: visualise
-          fictional election polling in a EuropeElects style, compute parliamentary majorities,
-          and browse party members across nations. Data comes live from{" "}
-          <code className="text-xs">api.ptr.zanz2.dev</code>.
+          A small collection of tools for the PR:R universe: visualise fictional election polling in
+          a EuropeElects style, compute parliamentary majorities, and browse party members across
+          nations. Data comes live from <code className="text-xs">api.ptr.zanz2.dev</code>.
         </p>
       </header>
 
@@ -92,7 +91,7 @@ function HomePage() {
                 key={n.id}
                 className="flex flex-col items-center gap-2 rounded-md border border-border bg-card p-3"
               >
-                <div className="flex h-16 w-full items-center justify-center overflow-hidden rounded-sm border border-border bg-white">
+                <div className="flex h-16 w-full items-center justify-center overflow-hidden rounded-sm bg-white">
                   {n.flagUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
