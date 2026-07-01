@@ -4,7 +4,7 @@ import { toPng, toJpeg } from "html-to-image";
 import { ParliamentChart } from "@/components/ParliamentChart";
 import { useNation } from "@/lib/nation-context";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/polls")({
   head: () => ({
     meta: [
       { title: "Polling — PR:R Tools" },
