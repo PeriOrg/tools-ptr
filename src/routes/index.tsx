@@ -142,6 +142,9 @@ function PollingTool() {
   // Party logos for the selected nation
   const [partyLogos, setPartyLogos] = useState<Map<number, string | null>>(new Map());
 
+  // Government status per party: "govt" (cabinet member) or "supp" (confidence partner)
+  const [govStatus, setGovStatus] = useState<Map<number, "govt" | "supp">>(new Map());
+
 
 
   // Party logos when nation changes
