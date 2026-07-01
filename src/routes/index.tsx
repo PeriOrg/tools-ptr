@@ -146,6 +146,13 @@ function PollingTool() {
   // Government status per party: "govt" (cabinet member) or "supp" (confidence partner)
   const [govStatus, setGovStatus] = useState<Map<number, "govt" | "supp">>(new Map());
 
+  // Chart export state
+  const chartRef = useRef<HTMLDivElement | null>(null);
+  const [exportFormat, setExportFormat] = useState<"png" | "jpg">("png");
+  const [exportLegend, setExportLegend] = useState(true);
+  const [exportBusy, setExportBusy] = useState(false);
+
+
 
 
   // Party logos when nation changes
@@ -306,6 +313,42 @@ function PollingTool() {
           )
         : 50;
 
+  const handleExport = async () => {
+    const node = chartRef.current;
+    if (!node || !poll) return;
+    setExportBusy(true);
+    const hidden: Array<{ el: HTMLElement; prev: string }> = [];
+    if (!exportLegend) {
+      node.querySelectorAll<HTMLElement>("[data-chart-legend]").forEach((el) => {
+        hidden.push({ el, prev: el.style.display });
+        el.style.display = "none";
+      });
+    }
+    try {
+      const opts = {
+        pixelRatio: 2,
+        backgroundColor: "#ffffff",
+        cacheBust: true,
+      };
+      const dataUrl =
+        exportFormat === "png"
+          ? await toPng(node, opts)
+          : await toJpeg(node, { ...opts, quality: 0.95 });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `ptr-${slugify(selectedNation?.name ?? "nation")}-${poll.game_month}-${mode}.${exportFormat}`;
+      a.click();
+    } catch (e) {
+      console.error("Export failed", e);
+    } finally {
+      hidden.forEach(({ el, prev }) => {
+        el.style.display = prev;
+      });
+      setExportBusy(false);
+    }
+  };
+
+
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -437,9 +480,7 @@ function PollingTool() {
             {mode === "estimate" && estimate && estimate.eligibleCount === 0 ? (
               <EmptyState message="No party would win seats — every party is below the threshold." />
             ) : (
-              <ChartExportWrapper
-                fileBase={`ptr-${slugify(selectedNation?.name ?? "nation")}-${poll.game_month}-${mode}`}
-              >
+              <div ref={chartRef} className="bg-card">
                 {mode === "estimate" ? (
                   <ParliamentChart
                     seats={rows.map((r) => ({
@@ -461,7 +502,7 @@ function PollingTool() {
                     govStatus={govStatus}
                   />
                 )}
-              </ChartExportWrapper>
+              </div>
             )}
 
 
@@ -545,8 +586,50 @@ function PollingTool() {
       </main>
 
       <footer className="mt-12 border-t border-border">
-        <div className="mx-auto max-w-6xl px-6 py-4 text-xs text-muted-foreground">
-          Data: api.ptr.zanz2.dev
+        <div className="mx-auto max-w-6xl px-6 py-4 text-xs text-muted-foreground flex items-center justify-between gap-4">
+          <span>Data: api.ptr.zanz2.dev</span>
+          {poll && (
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  className="h-3.5 w-3.5 accent-foreground cursor-pointer"
+                  checked={exportLegend}
+                  onChange={(e) => setExportLegend(e.target.checked)}
+                />
+                Include legend
+              </label>
+              <div className="inline-flex rounded-md border border-border overflow-hidden">
+                {(["png", "jpg"] as const).map((f) => (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => setExportFormat(f)}
+                    className={`px-2 py-1 uppercase tracking-wide ${
+                      exportFormat === f
+                        ? "bg-foreground text-background"
+                        : "bg-background text-muted-foreground hover:bg-secondary"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={handleExport}
+                disabled={exportBusy}
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-border bg-background hover:bg-secondary transition-colors disabled:opacity-50"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                {exportBusy ? "Exporting…" : "Export chart"}
+              </button>
+            </div>
+          )}
         </div>
       </footer>
     </div>
@@ -567,101 +650,6 @@ function DeltaInt({ v }: { v: number }) {
 
 function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "nation";
-}
-
-function ChartExportWrapper({
-  fileBase,
-  children,
-}: {
-  fileBase: string;
-  children: React.ReactNode;
-}) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [format, setFormat] = useState<"png" | "jpg">("png");
-  const [includeLegend, setIncludeLegend] = useState(true);
-  const [busy, setBusy] = useState(false);
-
-  const handleExport = async () => {
-    const node = ref.current;
-    if (!node) return;
-    setBusy(true);
-    // Temporarily hide legend nodes if excluded
-    const hidden: Array<{ el: HTMLElement; prev: string }> = [];
-    if (!includeLegend) {
-      node.querySelectorAll<HTMLElement>("[data-chart-legend]").forEach((el) => {
-        hidden.push({ el, prev: el.style.display });
-        el.style.display = "none";
-      });
-    }
-    try {
-      const opts = {
-        pixelRatio: 2,
-        backgroundColor: "#ffffff",
-        cacheBust: true,
-      };
-      const dataUrl =
-        format === "png" ? await toPng(node, opts) : await toJpeg(node, { ...opts, quality: 0.95 });
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = `${fileBase}.${format}`;
-      a.click();
-    } catch (e) {
-      console.error("Export failed", e);
-    } finally {
-      hidden.forEach(({ el, prev }) => {
-        el.style.display = prev;
-      });
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-end gap-3 text-xs">
-        <label className="inline-flex items-center gap-1.5 cursor-pointer select-none text-muted-foreground">
-          <input
-            type="checkbox"
-            className="h-3.5 w-3.5 accent-foreground cursor-pointer"
-            checked={includeLegend}
-            onChange={(e) => setIncludeLegend(e.target.checked)}
-          />
-          Include legend
-        </label>
-        <div className="inline-flex rounded-md border border-border overflow-hidden">
-          {(["png", "jpg"] as const).map((f) => (
-            <button
-              key={f}
-              type="button"
-              onClick={() => setFormat(f)}
-              className={`px-2 py-1 uppercase tracking-wide ${
-                format === f
-                  ? "bg-foreground text-background"
-                  : "bg-background text-muted-foreground hover:bg-secondary"
-              }`}
-            >
-              {f}
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={handleExport}
-          disabled={busy}
-          className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-border bg-background hover:bg-secondary transition-colors disabled:opacity-50"
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          {busy ? "Exporting…" : "Export"}
-        </button>
-      </div>
-      <div ref={ref} className="bg-card">
-        {children}
-      </div>
-    </div>
-  );
 }
 
 function EmptyState({ message, tone }: { message: string; tone?: "error" }) {
