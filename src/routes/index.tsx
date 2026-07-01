@@ -480,9 +480,7 @@ function PollingTool() {
             {mode === "estimate" && estimate && estimate.eligibleCount === 0 ? (
               <EmptyState message="No party would win seats — every party is below the threshold." />
             ) : (
-              <ChartExportWrapper
-                fileBase={`ptr-${slugify(selectedNation?.name ?? "nation")}-${poll.game_month}-${mode}`}
-              >
+              <div ref={chartRef} className="bg-card">
                 {mode === "estimate" ? (
                   <ParliamentChart
                     seats={rows.map((r) => ({
@@ -504,7 +502,7 @@ function PollingTool() {
                     govStatus={govStatus}
                   />
                 )}
-              </ChartExportWrapper>
+              </div>
             )}
 
 
