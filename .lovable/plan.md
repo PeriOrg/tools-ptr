@@ -1,28 +1,28 @@
-## Export chart as image (PNG / JPG)
+## Plan: Add Home/Intro page, move Polling to `/polls`
 
-Add an "Export" control above both the polling BarChart (Voting intention + Projected seats modes) and the ParliamentChart (Estimate parliament mode) that downloads the chart as an image, with an option to include or exclude the legend.
+### Routing changes
+- Rename `src/routes/index.tsx` → `src/routes/polls.tsx` with `createFileRoute("/polls")`. No other code changes inside.
+- Create new `src/routes/index.tsx` for `/` — the introduction/home page.
+- Update `src/routes/__root.tsx` nav: add **Home** link (leftmost), keep Polling, Majority, Members. Update the Polling link `to="/polls"`.
 
-### Changes
+### New Home page (`/`)
+Clean, data-journalism style consistent with existing pages.
 
-1. **Dependency**: add `html-to-image` (small, works well with the existing SVG + HTML/Tailwind bars — better than `html2canvas` for our SVG hemicycle).
+**Header**
+- Title: "PR:R Tools"
+- Short intro paragraph explaining the app: a set of tools to explore PR:R (Politics & Roleplay) fictional nations — polling visualisation, parliamentary majority calculator, and party members browser.
 
-2. **`src/routes/index.tsx`**
-   - Wrap each chart in an outer container with two nested refs:
-     - `fullRef` — chart + legend + party labels (full export)
-     - `chartOnlyRef` — chart body only (bars/hemicycle + axis + party labels, no legend/header)
-   - Add a small toolbar above each chart:
-     - Format toggle: `PNG | JPG`
-     - Checkbox: `Include legend`
-     - Button: `Export` — triggers download of `poll-<nation>-<gameMonth>-<mode>.png/jpg`
-   - Use `toPng` / `toJpeg` from `html-to-image` at 2× pixel ratio with a white background for clean output.
-   - For JPG, flatten with white background; PNG stays transparent-safe on white card.
+**Tools overview**
+- Three simple cards linking to `/polls`, `/majority`, `/members` with one-line descriptions each.
 
-3. **BarChart / ParliamentChart signature**
-   - Add an optional `exportSlot` prop (a header node) OR keep the toolbar in the parent and pass a `ref` into the chart. Simplest: parent owns the toolbar and refs, chart components accept a `forwardRef`-style outer `ref` on their root and expose a `data-export-legend` wrapper internally around the legend so the "exclude legend" mode can hide it via a temporary class before capture.
+**Countries available**
+- Fetch `/api/ptr/nations` to list all nations.
+- For each nation, in parallel fetch `/api/ptr/nations/{id}/law-states` and find the law whose `law_name` matches `"The national flag (URL)."` (case-insensitive contains "national flag"); take `current_value` as the flag image URL.
+- Render a responsive grid of cards: flag image (fixed height ~60px, `object-contain`, subtle border, white bg for transparent flags), nation name below. Fallback: gray placeholder if no flag URL / image fails to load.
+- Loading skeletons while fetching; error message if `/nations` fails.
+- Clicking a nation card does not change global state (nation selector still lives per-page for now) — purely informational; may optionally link to `/polls`.
 
-   Implementation detail: on export, if "Include legend" is off, temporarily add a class that sets `display:none` on the legend node inside the ref, snapshot, then restore. No structural refactor of the chart components needed.
-
-### Notes
-- File name pattern: `ptr-<nation-slug>-<gameMonth>-<viewMode>.<ext>`.
-- Buttons disabled when no poll is loaded.
-- No changes to Majority or Members pages.
+### Technical notes
+- All fetches through existing `/api/ptr/...` proxy.
+- Response shape: `law-states` returns categories → laws; flatten and search by law name.
+- No auth needed; no changes to other pages beyond the nav.
