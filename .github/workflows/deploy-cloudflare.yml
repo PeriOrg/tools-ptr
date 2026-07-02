@@ -36,4 +36,4 @@ jobs:
             accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
             workingDirectory: .output/server
             wranglerVersion: "4"
-            command: deploy index.mjs
+            command: deploy index.mjs --config wrangler.json
