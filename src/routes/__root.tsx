@@ -129,6 +129,7 @@ function RootComponent() {
         <NationProvider>
           <nav className="border-b border-border bg-card">
             <div className="mx-auto max-w-6xl px-4 sm:px-6 flex items-center gap-1 h-12">
+              <img src={ptrLogoAsset.url} alt="PR:R Tools" className="h-7 w-7 rounded-sm" />
               <span className="text-sm font-semibold tracking-tight text-foreground mr-4">PR:R Tools</span>
               <Link
                 to="/"
