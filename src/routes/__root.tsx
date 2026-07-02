@@ -10,6 +10,7 @@ import {
 import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import ptrLogoAsset from "../assets/ptr-logo.png.asset.json";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { PtrAuthProvider } from "../lib/ptr-auth";
 import { NationProvider, useNation } from "../lib/nation-context";
@@ -95,6 +96,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" },
+      { rel: "icon", type: "image/png", href: ptrLogoAsset.url },
       { rel: "stylesheet", href: appCss },
     ],
   }),
@@ -127,6 +129,7 @@ function RootComponent() {
         <NationProvider>
           <nav className="border-b border-border bg-card">
             <div className="mx-auto max-w-6xl px-4 sm:px-6 flex items-center gap-1 h-12">
+              <img src={ptrLogoAsset.url} alt="PR:R Tools" className="h-7 w-7 rounded-sm" />
               <span className="text-sm font-semibold tracking-tight text-foreground mr-4">PR:R Tools</span>
               <Link
                 to="/"
