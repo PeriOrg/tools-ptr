@@ -95,7 +95,7 @@ function HomePage() {
                     <img
                       src={n.flagUrl}
                       alt={`Flag of ${n.name}`}
-                      className="max-h-full max-w-full object-contain"
+                      className="max-h-full max-w-full object-contain border border-border rounded-sm"
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).style.display = "none";
                       }}
