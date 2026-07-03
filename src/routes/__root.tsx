@@ -34,9 +34,10 @@ import { SignInBadge } from "../components/SignInBadge";
 const NAV_ITEMS = [
   { to: "/", label: "Home", exact: true },
   { to: "/polls", label: "Polling" },
-  { to: "/majority", label: "Majority calculator" },
+  { to: "/majority", label: "Majority Calculator" },
   { to: "/members", label: "Members" },
   { to: "/party-primary", label: "Party Primary" },
+  { to: "/political-contestation", label: "Political Compass" },
 ] as const;
 
 const MOBILE_PRIMARY_NAV_ITEMS = NAV_ITEMS.slice(0, 3);
@@ -110,7 +111,6 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
