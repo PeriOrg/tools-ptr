@@ -684,8 +684,7 @@ function PollingTool() {
             </div>
             {mode === "estimate" && (
               <p className="text-xs text-muted-foreground italic">
-                Estimated seats based on current poll at {estThreshold}% threshold,{" "}
-                {Math.max(1, Math.floor(estTotalSeats))} seats — not an official projection.
+                Based on the current poll at a {estThreshold}% threshold, the estimated number of seats is {Math.max(1, Math.floor(estTotalSeats))}. This is not an official projection.
               </p>
             )}
             {mode === "estimate" && estimate && estimate.eligibleCount === 0 ? (
@@ -897,7 +896,7 @@ function PollingTool() {
                   <polyline points="7 10 12 15 17 10" />
                   <line x1="12" y1="15" x2="12" y2="3" />
                 </svg>
-                {exportBusy ? "Exporting…" : "Export chart"}
+                {exportBusy ? "Exporting…" : "Download image"}
               </button>
             </div>
           )}

@@ -1557,7 +1557,7 @@ function PartyPrimaryTool() {
               disabled={exportBusy}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-border bg-background hover:bg-secondary transition-colors disabled:opacity-50"
             >
-              {exportBusy ? "Exporting..." : "Export chart"}
+              {exportBusy ? "Exporting..." : "Download image"}
             </button>
 
             <button
@@ -1751,7 +1751,7 @@ function HorizontalBarResultChart({ data }: { data: HorizontalBarDatum[] }) {
             <LabelList
               dataKey="pctLabel"
               position="right"
-              fill="#0f172a"
+              fill="hsl(var(--foreground))"
               fontSize={12}
               fontWeight={600}
             />
