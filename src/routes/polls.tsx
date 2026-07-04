@@ -684,8 +684,7 @@ function PollingTool() {
             </div>
             {mode === "estimate" && (
               <p className="text-xs text-muted-foreground italic">
-                Estimated seats based on current poll at {estThreshold}% threshold,{" "}
-                {Math.max(1, Math.floor(estTotalSeats))} seats — not an official projection.
+                Based on the current poll at a {estThreshold}% threshold, the estimated number of seats is {Math.max(1, Math.floor(estTotalSeats))}. This is not an official projection.
               </p>
             )}
             {mode === "estimate" && estimate && estimate.eligibleCount === 0 ? (
