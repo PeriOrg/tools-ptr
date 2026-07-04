@@ -166,8 +166,8 @@ function SignInModal({
         </h2>
         <p className="mt-1 text-xs text-muted-foreground">
           {isBearerView
-            ? "Paste your access token to sign in. The token will be stored in your browser."
-            : "Uses your PR:R account credentials. Tokens are kept only in your browser."}
+            ? "Paste here your access token to sign in. The token will be stored in your browser and never shared."
+            : "Sign in with your PR:R account. Your credentials stay in your browser and are never shared."}
         </p>
 
         <div className="relative mt-4 min-h-[330px] overflow-hidden">
