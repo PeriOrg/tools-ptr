@@ -48,11 +48,38 @@ type Figure = {
   full_name?: string;
   charisma?: number;
   experience?: number;
-  age?: number;
+  image_url?: string | null;
+  wiki_url?: string | null;
+  created_at_game_month?: number;
   gender?: string;
   is_active?: boolean;
   party_id?: number;
 };
+
+type FigureStats = {
+  charisma?: number;
+  experience?: number;
+  image_url?: string | null;
+  wiki_url?: string | null;
+};
+
+type MinisterAssignment = {
+  political_figure_id?: number;
+  ministry_name?: string;
+  effective_minister_name?: string;
+  minister_name?: string;
+};
+
+type FutureRolePill = {
+  label: string;
+  hover: string;
+};
+
+function toPercent(value: number, min: number, max: number) {
+  if (max <= min) return 100;
+  const pct = ((value - min) / (max - min)) * 100;
+  return Math.max(0, Math.min(100, pct));
+}
 
 function colorLuma(hex: string) {
   const h = hex.replace("#", "");
@@ -66,6 +93,73 @@ function borderForColor(hex: string) {
   return colorLuma(hex) > 0.92 ? "#cbd5e1" : "transparent";
 }
 
+function roleBorderForColor(hex: string) {
+  return colorLuma(hex) > 0.85 ? "#94a3b8" : "rgba(15, 23, 42, 0.35)";
+}
+
+function textForColor(hex: string) {
+  return colorLuma(hex) > 0.6 ? "#111827" : "#ffffff";
+}
+
+function safeHttpUrl(value: string | null | undefined) {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") return parsed.toString();
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function normalizeFutureRole(name: string) {
+  const trimmed = name.trim().replace(/\s+/g, " ");
+  const lower = trimmed.toLowerCase();
+
+  if (!trimmed) return "";
+  if (lower.startsWith("party secretary") || lower.startsWith("party nominee")) {
+    return trimmed;
+  }
+
+  const deputyMinisterOfMatch = /^(vice|deputy)\s+minister\s+of\s+(.+)$/i.exec(trimmed);
+  if (deputyMinisterOfMatch) {
+    return `Deputy Party Secretary of ${deputyMinisterOfMatch[2]}`;
+  }
+
+  const ministerOfMatch = /^minister\s+of\s+(.+)$/i.exec(trimmed);
+  if (ministerOfMatch) {
+    return `Party Secretary of ${ministerOfMatch[1]}`;
+  }
+
+  const headOfficeAliases: Record<string, string> = {
+    "prime minister": "Prime Minister",
+    president: "President",
+    chancellor: "Chancellor",
+    premier: "Premier",
+    toshiagh: "Toshiagh",
+    taoiseach: "Taoiseach",
+  };
+
+  if (headOfficeAliases[lower]) {
+    return `Party nominee for ${headOfficeAliases[lower]}`;
+  }
+
+  if (/^(vice|deputy)\s+(president|prime minister|chancellor|premier)$/i.test(trimmed)) {
+    return `Party nominee for ${trimmed}`;
+  }
+
+  return `Party nominee for ${trimmed}`;
+}
+
+function nomineeHoverText(name: string) {
+  const trimmed = name.trim().replace(/\s+/g, " ");
+  if (!trimmed) return "";
+  if (/^party nominee for\s+/i.test(trimmed)) return trimmed;
+  return `Party nominee for ${trimmed}`;
+}
+
 function MembersPage() {
   const { session, authFetch } = usePtrAuth();
 
@@ -75,6 +169,8 @@ function MembersPage() {
 
   const [positions, setPositions] = useState<Position[] | null>(null);
   const [figures, setFigures] = useState<Figure[] | null>(null);
+  const [figureStatsById, setFigureStatsById] = useState<Record<number, FigureStats>>({});
+  const [futureRolesByFigureId, setFutureRolesByFigureId] = useState<Record<number, FutureRolePill[]>>({});
   const [figuresErr, setFiguresErr] = useState<string | null>(null);
   const [loadingFigures, setLoadingFigures] = useState(false);
 
@@ -141,9 +237,11 @@ function MembersPage() {
   }, [session, authFetch]);
 
   const loadPartyDetail = useCallback(
-    async (id: number) => {
+    async (id: number, nationId: number | null) => {
       setPositions(null);
       setFigures(null);
+      setFigureStatsById({});
+      setFutureRolesByFigureId({});
       setFiguresErr(null);
       try {
         const r = await fetch(`/api/ptr/parties/${id}/positions`);
@@ -165,6 +263,78 @@ function MembersPage() {
         }
         const data = (await r.json()) as Figure[];
         setFigures(data);
+        setLoadingFigures(false);
+
+        try {
+          const mr = await authFetch(`/api/ptr/parties/${id}/minister-names`);
+          if (mr.ok) {
+            const payload = await mr.json();
+            const rawAssignments: MinisterAssignment[] = Array.isArray(payload)
+              ? payload
+              : payload?.assignments ?? payload?.minister_names ?? [];
+
+            const figureIdByName = new Map<string, number>();
+            data.forEach((f) => {
+              const candidateNames = [f.name, f.full_name]
+                .filter((n): n is string => typeof n === "string" && n.trim().length > 0)
+                .map((n) => n.trim().toLowerCase());
+              candidateNames.forEach((n) => figureIdByName.set(n, f.id));
+            });
+
+            const roleMap = new Map<number, Map<string, FutureRolePill>>();
+            rawAssignments.forEach((a) => {
+              const politicianNameKey = (a.effective_minister_name ?? "").trim().toLowerCase();
+              const figureId =
+                typeof a.political_figure_id === "number"
+                  ? a.political_figure_id
+                  : figureIdByName.get(politicianNameKey);
+              const sourceRole = (a.ministry_name ?? a.minister_name ?? "").trim();
+              const roleLabel = normalizeFutureRole(sourceRole);
+              const hover = nomineeHoverText(sourceRole);
+              if (typeof figureId !== "number" || !roleLabel || !hover) return;
+              if (!roleMap.has(figureId)) roleMap.set(figureId, new Map<string, FutureRolePill>());
+              roleMap.get(figureId)?.set(`${roleLabel}|${hover}`, { label: roleLabel, hover });
+            });
+
+            setFutureRolesByFigureId(
+              Object.fromEntries(
+                Array.from(roleMap.entries()).map(([figureId, labels]) => [figureId, Array.from(labels.values())]),
+              ),
+            );
+          }
+        } catch {
+          // Keep the members table functional if minister-name fetch fails.
+        }
+
+        if (nationId != null) {
+          // Enrich rows progressively so the table is visible immediately.
+          void Promise.allSettled(
+            data.map(async (f) => {
+              try {
+                const detailRes = await authFetch(
+                  `/api/ptr/nations/${nationId}/political-figures/${f.id}`,
+                );
+                if (!detailRes.ok) return;
+                const detail = (await detailRes.json()) as Figure;
+                setFigureStatsById((prev) => {
+                  const existing = prev[f.id] ?? {};
+                  return {
+                    ...prev,
+                    [f.id]: {
+                      ...existing,
+                      charisma: detail.charisma ?? existing.charisma,
+                      experience: detail.experience ?? existing.experience,
+                      image_url: detail.image_url ?? existing.image_url,
+                      wiki_url: detail.wiki_url ?? existing.wiki_url,
+                    },
+                  };
+                });
+              } catch {
+                // Keep enrichment best-effort and non-blocking.
+              }
+            }),
+          );
+        }
       } catch (e) {
         setFiguresErr((e as Error).message);
       } finally {
@@ -175,8 +345,11 @@ function MembersPage() {
   );
 
   useEffect(() => {
-    if (partyId != null) void loadPartyDetail(partyId);
-  }, [partyId, loadPartyDetail]);
+    if (partyId != null) {
+      const nationId = myParties?.find((p) => p.id === partyId)?.nation_id ?? null;
+      void loadPartyDetail(partyId, nationId);
+    }
+  }, [partyId, myParties, loadPartyDetail]);
 
   const selectedParty = useMemo(
     () => myParties?.find((p) => p.id === partyId) ?? null,
@@ -200,6 +373,28 @@ function MembersPage() {
       return (a.name ?? a.full_name ?? "").localeCompare(b.name ?? b.full_name ?? "");
     });
   }, [figures, positionHolderIds]);
+
+  const statRange = useMemo(() => {
+    if (!sortedFigures || sortedFigures.length === 0) return null;
+
+    const charismaValues: number[] = [];
+    const experienceValues: number[] = [];
+
+    sortedFigures.forEach((f) => {
+      const stats = figureStatsById[f.id];
+      const charisma = stats?.charisma ?? f.charisma;
+      const experience = stats?.experience ?? f.experience;
+      if (typeof charisma === "number") charismaValues.push(charisma);
+      if (typeof experience === "number") experienceValues.push(experience);
+    });
+
+    return {
+      charismaMin: charismaValues.length ? Math.min(...charismaValues) : null,
+      charismaMax: charismaValues.length ? Math.max(...charismaValues) : null,
+      experienceMin: experienceValues.length ? Math.min(...experienceValues) : null,
+      experienceMax: experienceValues.length ? Math.max(...experienceValues) : null,
+    };
+  }, [sortedFigures, figureStatsById]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -302,35 +497,133 @@ function MembersPage() {
                 <div className="text-sm text-muted-foreground">No members found.</div>
               ) : (
                 <div className="rounded-lg border border-border overflow-x-auto">
-                  <table className="min-w-[760px] w-full text-sm">
+                  <table className="min-w-[900px] w-full text-sm">
                     <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                       <tr>
                         <th className="text-left px-3 py-2 font-medium">Name</th>
                         <th className="text-left px-3 py-2 font-medium">Role</th>
-                        <th className="text-right px-3 py-2 font-medium">Charisma</th>
-                        <th className="text-right px-3 py-2 font-medium">Experience</th>
-                        <th className="text-right px-3 py-2 font-medium">Age</th>
+                        <th className="text-left px-3 py-2 font-medium">Charisma</th>
+                        <th className="text-left px-3 py-2 font-medium">Experience</th>
+                        <th className="text-right px-3 py-2 font-medium">Join date</th>
                       </tr>
                     </thead>
                     <tbody>
                       {sortedFigures.map((f) => {
                         const name = f.name ?? f.full_name ?? `Figure #${f.id}`;
                         const role = positionHolderIds.get(f.id);
+                        const futureRoles = futureRolesByFigureId[f.id] ?? [];
+                        const stats = figureStatsById[f.id];
+                        const imageUrl = safeHttpUrl(stats?.image_url ?? f.image_url);
+                        const wikiHref = safeHttpUrl(stats?.wiki_url ?? f.wiki_url);
+                        const charisma = stats?.charisma ?? f.charisma;
+                        const experience = stats?.experience ?? f.experience;
+                        const isNegativeCharisma =
+                          typeof charisma === "number" && charisma < 0;
+                        const charismaPct =
+                          typeof charisma === "number" &&
+                          statRange?.charismaMin != null &&
+                          statRange.charismaMax != null
+                            ? toPercent(charisma, statRange.charismaMin, statRange.charismaMax)
+                            : null;
+                        const experiencePct =
+                          typeof experience === "number" &&
+                          statRange?.experienceMin != null &&
+                          statRange.experienceMax != null
+                            ? toPercent(
+                                experience,
+                                statRange.experienceMin,
+                                statRange.experienceMax,
+                              )
+                            : null;
                         return (
-                          <tr key={f.id} className="border-t border-border">
-                            <td className="px-3 py-2 font-medium">{name}</td>
+                          <tr
+                            key={f.id}
+                            className={`border-t border-border ${wikiHref ? "cursor-pointer hover:bg-muted/30" : "cursor-default"}`}
+                            onClick={
+                              wikiHref
+                                ? () => {
+                                    window.open(wikiHref, "_blank", "noopener,noreferrer");
+                                  }
+                                : undefined
+                            }
+                          >
+                            <td className="px-3 py-2 font-medium">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`h-7 w-7 shrink-0 overflow-hidden rounded-full ${imageUrl ? "bg-muted" : "bg-transparent"}`}
+                                >
+                                  {imageUrl ? (
+                                    <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+                                  ) : (
+                                    <div className="h-full w-full rounded-full border border-border/40 bg-muted/20" />
+                                  )}
+                                </div>
+                                <span>{name}</span>
+                              </div>
+                            </td>
                             <td className="px-3 py-2">
-                              {role ? (
-                                <span className="inline-flex items-center rounded-full bg-foreground/5 px-2 py-0.5 text-xs font-medium">
-                                  {role}
-                                </span>
+                              {role || futureRoles.length > 0 ? (
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {role && (
+                                    <span
+                                      className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
+                                      style={{
+                                        background: selectedParty?.color ?? "#6b7280",
+                                        color: textForColor(selectedParty?.color ?? "#6b7280"),
+                                        borderColor:
+                                          selectedParty?.color
+                                            ? roleBorderForColor(selectedParty.color)
+                                            : "#374151",
+                                      }}
+                                    >
+                                      {role}
+                                    </span>
+                                  )}
+                                  {futureRoles.map((futureRole) => (
+                                    <span
+                                      key={`${f.id}-${futureRole.label}-${futureRole.hover}`}
+                                      className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                      title={futureRole.hover}
+                                    >
+                                      {futureRole.label}
+                                    </span>
+                                  ))}
+                                </div>
                               ) : (
                                 <span className="text-xs text-muted-foreground">Member</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums">{f.charisma ?? "—"}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{f.experience ?? "—"}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{f.age ?? "—"}</td>
+                            <td className="px-3 py-2">
+                              {charismaPct == null ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <div className="flex items-center gap-2" title={String(charisma)}>
+                                  <div className="h-2.5 w-32 overflow-hidden rounded-full bg-muted">
+                                    <div
+                                      className={`h-full rounded-full ${isNegativeCharisma ? "bg-red-500" : "bg-sky-500"}`}
+                                      style={{ width: `${charismaPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {experiencePct == null ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <div className="flex items-center gap-2" title={String(experience)}>
+                                  <div className="h-2.5 w-32 overflow-hidden rounded-full bg-muted">
+                                    <div
+                                      className="h-full rounded-full bg-amber-500"
+                                      style={{ width: `${experiencePct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {f.created_at_game_month ?? "—"}
+                            </td>
                           </tr>
                         );
                       })}
