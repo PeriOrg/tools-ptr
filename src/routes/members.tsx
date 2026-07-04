@@ -50,7 +50,7 @@ type Figure = {
   experience?: number;
   image_url?: string | null;
   wiki_url?: string | null;
-  created_at_game_month?: number;
+  created_at_game_month?: number | string;
   gender?: string;
   is_active?: boolean;
   party_id?: number;
@@ -75,10 +75,173 @@ type FutureRolePill = {
   hover: string;
 };
 
-function toPercent(value: number, min: number, max: number) {
-  if (max <= min) return 100;
-  const pct = ((value - min) / (max - min)) * 100;
-  return Math.max(0, Math.min(100, pct));
+type MemberSortKey = "name" | "role" | "charisma" | "experience" | "joinDate";
+type MemberSortConfig = {
+  key: MemberSortKey;
+  direction: "asc" | "desc";
+};
+
+const CHARISMA_BAND_UPPER_BOUNDS = [-0.8416, -0.2533, 0.2533, 0.8416] as const;
+const CHARISMA_BAND_COLORS = [
+  "bg-rose-600",
+  "bg-orange-500",
+  "bg-amber-400",
+  "bg-lime-500",
+  "bg-emerald-600",
+] as const;
+const CHARISMA_BAND_LABELS = [
+  "Offputting",
+  "Awkward",
+  "Plain",
+  "Persuasive",
+  "Compelling",
+] as const;
+const EXPERIENCE_TIER_MINIMUMS = [0, 3, 6, 9, 15] as const;
+const EXPERIENCE_TIER_LABELS = [
+  "Newcomer",
+  "Emerging",
+  "Established",
+  "Veteran",
+  "Statesperson",
+] as const;
+const EXPERIENCE_TIER_COLORS = [
+  "bg-amber-500",
+  "bg-amber-500",
+  "bg-amber-500",
+  "bg-amber-500",
+  "bg-amber-500",
+] as const;
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+const MONTH_NAME_TO_INDEX: Record<string, number> = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
+
+function charismaBandIndex(value: number) {
+  for (let i = 0; i < CHARISMA_BAND_UPPER_BOUNDS.length; i += 1) {
+    if (value <= CHARISMA_BAND_UPPER_BOUNDS[i]) return i;
+  }
+  return CHARISMA_BAND_UPPER_BOUNDS.length;
+}
+
+function charismaBandLabel(value: number) {
+  return CHARISMA_BAND_LABELS[charismaBandIndex(value)];
+}
+
+function experienceTierIndex(value: number) {
+  for (let i = EXPERIENCE_TIER_MINIMUMS.length - 1; i >= 0; i -= 1) {
+    if (value >= EXPERIENCE_TIER_MINIMUMS[i]) return i;
+  }
+  return 0;
+}
+
+function experienceTierLabel(value: number) {
+  return EXPERIENCE_TIER_LABELS[experienceTierIndex(value)];
+}
+
+function parseYearMonth(value: number | string | null | undefined) {
+  if (value == null) return null;
+
+  if (typeof value === "number") {
+    const yyyymm = String(Math.trunc(value));
+    if (/^\d{6}$/.test(yyyymm)) {
+      const year = Number(yyyymm.slice(0, 4));
+      const month = Number(yyyymm.slice(4, 6));
+      if (month >= 1 && month <= 12) return { year, month };
+    }
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const dashMatch = /^(\d{4})[-/](\d{1,2})$/.exec(trimmed);
+  if (dashMatch) {
+    const year = Number(dashMatch[1]);
+    const month = Number(dashMatch[2]);
+    if (month >= 1 && month <= 12) return { year, month };
+  }
+
+  const monthYearMatch = /^([A-Za-z]{3,9})\s+(\d{4})$/.exec(trimmed);
+  if (monthYearMatch) {
+    const month = MONTH_NAME_TO_INDEX[monthYearMatch[1].toLowerCase()];
+    const year = Number(monthYearMatch[2]);
+    if (month) return { year, month };
+  }
+
+  const yearMonthMatch = /^(\d{4})\s+([A-Za-z]{3,9})$/.exec(trimmed);
+  if (yearMonthMatch) {
+    const year = Number(yearMonthMatch[1]);
+    const month = MONTH_NAME_TO_INDEX[yearMonthMatch[2].toLowerCase()];
+    if (month) return { year, month };
+  }
+
+  return null;
+}
+
+function formatJoinDate(value: number | string | null | undefined) {
+  if (value == null || value === "") return "—";
+  const parsed = parseYearMonth(value);
+  if (!parsed) return String(value);
+  return `${MONTH_NAMES[parsed.month - 1]} ${parsed.year}`;
+}
+
+function joinDateSortValue(value: number | string | null | undefined) {
+  if (value == null || value === "") return null;
+  const parsed = parseYearMonth(value);
+  if (parsed) return parsed.year * 12 + parsed.month;
+  if (typeof value === "number") return value;
+  const numericText = Number(value);
+  if (Number.isFinite(numericText)) return numericText;
+  return null;
+}
+
+function compareNullableNumbers(a: number | null, b: number | null, direction: "asc" | "desc") {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return direction === "asc" ? a - b : b - a;
+}
+
+function compareText(a: string, b: string, direction: "asc" | "desc") {
+  const base = a.localeCompare(b, undefined, { sensitivity: "base" });
+  return direction === "asc" ? base : -base;
 }
 
 function colorLuma(hex: string) {
@@ -160,6 +323,55 @@ function nomineeHoverText(name: string) {
   return `Party nominee for ${trimmed}`;
 }
 
+function PositionHallCard({
+  holderName,
+  positionTitle,
+  portraitUrl,
+  partyLogoUrl,
+}: {
+  holderName: string;
+  positionTitle: string;
+  portraitUrl: string | null;
+  partyLogoUrl: string | null;
+}) {
+  const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(portraitUrl ?? partyLogoUrl);
+
+  useEffect(() => {
+    setCurrentImageUrl(portraitUrl ?? partyLogoUrl);
+  }, [portraitUrl, partyLogoUrl]);
+
+  const onImageError = useCallback(() => {
+    setCurrentImageUrl((prev) => {
+      if (prev !== partyLogoUrl && partyLogoUrl) return partyLogoUrl;
+      return null;
+    });
+  }, [partyLogoUrl]);
+
+  return (
+    <article className="text-center">
+      <div
+        className={`mx-auto h-32 w-32 overflow-hidden rounded-xl border border-border/70 ${currentImageUrl ? "bg-muted" : "bg-muted/20"}`}
+        title={positionTitle}
+      >
+        {currentImageUrl ? (
+          <img
+            src={currentImageUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={onImageError}
+          />
+        ) : (
+          <div className="h-full w-full bg-muted/30" />
+        )}
+      </div>
+      <div className="mt-2 space-y-1 px-1">
+        <div className="text-sm font-medium leading-tight text-center">{holderName}</div>
+        <div className="text-xs leading-tight text-muted-foreground text-center">{positionTitle}</div>
+      </div>
+    </article>
+  );
+}
+
 function MembersPage() {
   const { session, authFetch } = usePtrAuth();
 
@@ -173,6 +385,7 @@ function MembersPage() {
   const [futureRolesByFigureId, setFutureRolesByFigureId] = useState<Record<number, FutureRolePill[]>>({});
   const [figuresErr, setFiguresErr] = useState<string | null>(null);
   const [loadingFigures, setLoadingFigures] = useState(false);
+  const [memberSort, setMemberSort] = useState<MemberSortConfig | null>(null);
 
   // Fetch the signed-in user's party(ies)
   useEffect(() => {
@@ -364,7 +577,7 @@ function MembersPage() {
     return m;
   }, [positions]);
 
-  const sortedFigures = useMemo(() => {
+  const baseFigures = useMemo(() => {
     if (!figures) return null;
     return [...figures].sort((a, b) => {
       const ah = positionHolderIds.has(a.id) ? 0 : 1;
@@ -374,27 +587,82 @@ function MembersPage() {
     });
   }, [figures, positionHolderIds]);
 
-  const statRange = useMemo(() => {
-    if (!sortedFigures || sortedFigures.length === 0) return null;
+  const sortedFigures = useMemo(() => {
+    if (!baseFigures) return null;
+    if (!memberSort) return baseFigures;
+    const rows = [...baseFigures];
 
-    const charismaValues: number[] = [];
-    const experienceValues: number[] = [];
+    rows.sort((a, b) => {
+      const aName = a.name ?? a.full_name ?? `Figure #${a.id}`;
+      const bName = b.name ?? b.full_name ?? `Figure #${b.id}`;
 
-    sortedFigures.forEach((f) => {
-      const stats = figureStatsById[f.id];
-      const charisma = stats?.charisma ?? f.charisma;
-      const experience = stats?.experience ?? f.experience;
-      if (typeof charisma === "number") charismaValues.push(charisma);
-      if (typeof experience === "number") experienceValues.push(experience);
+      const aStats = figureStatsById[a.id];
+      const bStats = figureStatsById[b.id];
+
+      const aRole =
+        positionHolderIds.get(a.id) ?? futureRolesByFigureId[a.id]?.[0]?.label ?? "Member";
+      const bRole =
+        positionHolderIds.get(b.id) ?? futureRolesByFigureId[b.id]?.[0]?.label ?? "Member";
+
+      const aCharisma = aStats?.charisma ?? a.charisma ?? null;
+      const bCharisma = bStats?.charisma ?? b.charisma ?? null;
+      const aExperience = aStats?.experience ?? a.experience ?? null;
+      const bExperience = bStats?.experience ?? b.experience ?? null;
+
+      const aJoinSort = joinDateSortValue(a.created_at_game_month);
+      const bJoinSort = joinDateSortValue(b.created_at_game_month);
+
+      if (memberSort.key === "name") {
+        return compareText(aName, bName, memberSort.direction);
+      }
+      if (memberSort.key === "role") {
+        const byRole = compareText(aRole, bRole, memberSort.direction);
+        return byRole !== 0 ? byRole : compareText(aName, bName, "asc");
+      }
+      if (memberSort.key === "charisma") {
+        const byCharisma = compareNullableNumbers(aCharisma, bCharisma, memberSort.direction);
+        return byCharisma !== 0 ? byCharisma : compareText(aName, bName, "asc");
+      }
+      if (memberSort.key === "experience") {
+        const byExperience = compareNullableNumbers(aExperience, bExperience, memberSort.direction);
+        return byExperience !== 0 ? byExperience : compareText(aName, bName, "asc");
+      }
+
+      const byJoinDate = compareNullableNumbers(aJoinSort, bJoinSort, memberSort.direction);
+      return byJoinDate !== 0 ? byJoinDate : compareText(aName, bName, "asc");
     });
 
-    return {
-      charismaMin: charismaValues.length ? Math.min(...charismaValues) : null,
-      charismaMax: charismaValues.length ? Math.max(...charismaValues) : null,
-      experienceMin: experienceValues.length ? Math.min(...experienceValues) : null,
-      experienceMax: experienceValues.length ? Math.max(...experienceValues) : null,
-    };
-  }, [sortedFigures, figureStatsById]);
+    return rows;
+  }, [baseFigures, figureStatsById, futureRolesByFigureId, memberSort, positionHolderIds]);
+
+  const figuresById = useMemo(() => {
+    const m = new Map<number, Figure>();
+    figures?.forEach((f) => m.set(f.id, f));
+    return m;
+  }, [figures]);
+
+  const partyLogoFallbackUrl = useMemo(
+    () => safeHttpUrl(selectedParty?.logo_url),
+    [selectedParty?.logo_url],
+  );
+
+  const onSortColumn = useCallback((key: MemberSortKey) => {
+    setMemberSort((prev) => {
+      if (!prev) return { key, direction: "asc" };
+      if (prev.key === key) {
+        return { key, direction: prev.direction === "asc" ? "desc" : "asc" };
+      }
+      return { key, direction: "asc" };
+    });
+  }, []);
+
+  const sortIndicator = useCallback(
+    (key: MemberSortKey) => {
+      if (!memberSort || memberSort.key !== key) return "";
+      return memberSort.direction === "asc" ? "^" : "v";
+    },
+    [memberSort],
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -458,37 +726,45 @@ function MembersPage() {
             )}
 
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold tracking-tight">Internal positions</h2>
+              <h2 className="text-sm font-semibold tracking-tight">Party positions</h2>
               {!positions ? (
                 <div className="text-sm text-muted-foreground">Loading…</div>
               ) : positions.length === 0 ? (
-                <div className="text-sm text-muted-foreground">No internal positions defined.</div>
+                <div className="text-sm text-muted-foreground">No party positions defined.</div>
               ) : (
-                <div className="rounded-lg border border-border overflow-x-auto">
-                  <table className="min-w-[520px] w-full text-sm">
-                    <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-medium">Position</th>
-                        <th className="text-left px-3 py-2 font-medium">Holder</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {positions.map((p) => (
-                        <tr key={p.id} className="border-t border-border">
-                          <td className="px-3 py-2">{p.title}</td>
-                          <td className="px-3 py-2 text-muted-foreground">
-                            {p.current_holder?.name ?? <span className="italic">vacant</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="rounded-lg border border-border bg-card p-4">
+                  {positions.some((p) => p.current_holder) ? (
+                    <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(9rem,1fr))]">
+                      {positions
+                        .filter((p) => p.current_holder)
+                        .map((p) => {
+                          const holderId = p.current_holder?.political_figure_id;
+                          const figure =
+                            typeof holderId === "number" ? figuresById.get(holderId) : undefined;
+                          const stats =
+                            typeof holderId === "number" ? figureStatsById[holderId] : undefined;
+                          const imageUrl = safeHttpUrl(stats?.image_url ?? figure?.image_url);
+
+                          return (
+                            <PositionHallCard
+                              key={p.id}
+                              holderName={p.current_holder?.name ?? "Unknown member"}
+                              positionTitle={p.title}
+                              portraitUrl={imageUrl}
+                              partyLogoUrl={partyLogoFallbackUrl}
+                            />
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">No party positions are currently assigned.</div>
+                  )}
                 </div>
               )}
             </section>
 
             <section className="space-y-2">
-              <h2 className="text-sm font-semibold tracking-tight">Political figures</h2>
+              <h2 className="text-sm font-semibold tracking-tight">Members</h2>
               {loadingFigures ? (
                 <div className="text-sm text-muted-foreground">Loading members…</div>
               ) : figuresErr ? (
@@ -496,140 +772,191 @@ function MembersPage() {
               ) : !sortedFigures || sortedFigures.length === 0 ? (
                 <div className="text-sm text-muted-foreground">No members found.</div>
               ) : (
-                <div className="rounded-lg border border-border overflow-x-auto">
-                  <table className="min-w-[900px] w-full text-sm">
-                    <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-medium">Name</th>
-                        <th className="text-left px-3 py-2 font-medium">Role</th>
-                        <th className="text-left px-3 py-2 font-medium">Charisma</th>
-                        <th className="text-left px-3 py-2 font-medium">Experience</th>
-                        <th className="text-right px-3 py-2 font-medium">Join date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {sortedFigures.map((f) => {
-                        const name = f.name ?? f.full_name ?? `Figure #${f.id}`;
-                        const role = positionHolderIds.get(f.id);
-                        const futureRoles = futureRolesByFigureId[f.id] ?? [];
-                        const stats = figureStatsById[f.id];
-                        const imageUrl = safeHttpUrl(stats?.image_url ?? f.image_url);
-                        const wikiHref = safeHttpUrl(stats?.wiki_url ?? f.wiki_url);
-                        const charisma = stats?.charisma ?? f.charisma;
-                        const experience = stats?.experience ?? f.experience;
-                        const isNegativeCharisma =
-                          typeof charisma === "number" && charisma < 0;
-                        const charismaPct =
-                          typeof charisma === "number" &&
-                          statRange?.charismaMin != null &&
-                          statRange.charismaMax != null
-                            ? toPercent(charisma, statRange.charismaMin, statRange.charismaMax)
-                            : null;
-                        const experiencePct =
-                          typeof experience === "number" &&
-                          statRange?.experienceMin != null &&
-                          statRange.experienceMax != null
-                            ? toPercent(
-                                experience,
-                                statRange.experienceMin,
-                                statRange.experienceMax,
-                              )
-                            : null;
-                        return (
-                          <tr
-                            key={f.id}
-                            className={`border-t border-border ${wikiHref ? "cursor-pointer hover:bg-muted/30" : "cursor-default"}`}
-                            onClick={
-                              wikiHref
-                                ? () => {
-                                    window.open(wikiHref, "_blank", "noopener,noreferrer");
-                                  }
-                                : undefined
-                            }
-                          >
-                            <td className="px-3 py-2 font-medium">
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className={`h-7 w-7 shrink-0 overflow-hidden rounded-full ${imageUrl ? "bg-muted" : "bg-transparent"}`}
-                                >
-                                  {imageUrl ? (
-                                    <img src={imageUrl} alt="" className="h-full w-full object-cover" />
-                                  ) : (
-                                    <div className="h-full w-full rounded-full border border-border/40 bg-muted/20" />
-                                  )}
-                                </div>
-                                <span>{name}</span>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2">
-                              {role || futureRoles.length > 0 ? (
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  {role && (
-                                    <span
-                                      className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
-                                      style={{
-                                        background: selectedParty?.color ?? "#6b7280",
-                                        color: textForColor(selectedParty?.color ?? "#6b7280"),
-                                        borderColor:
-                                          selectedParty?.color
-                                            ? roleBorderForColor(selectedParty.color)
-                                            : "#374151",
-                                      }}
-                                    >
-                                      {role}
-                                    </span>
-                                  )}
-                                  {futureRoles.map((futureRole) => (
-                                    <span
-                                      key={`${f.id}-${futureRole.label}-${futureRole.hover}`}
-                                      className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                      title={futureRole.hover}
-                                    >
-                                      {futureRole.label}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">Member</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              {charismaPct == null ? (
-                                <span className="text-muted-foreground">—</span>
-                              ) : (
-                                <div className="flex items-center gap-2" title={String(charisma)}>
-                                  <div className="h-2.5 w-32 overflow-hidden rounded-full bg-muted">
-                                    <div
-                                      className={`h-full rounded-full ${isNegativeCharisma ? "bg-red-500" : "bg-sky-500"}`}
-                                      style={{ width: `${charismaPct}%` }}
-                                    />
+                <>
+                  <div className="rounded-lg border border-border overflow-x-auto">
+                    <table className="min-w-[900px] w-full text-sm">
+                      <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 hover:text-foreground"
+                              onClick={() => onSortColumn("name")}
+                            >
+                              Name
+                              <span className="text-[10px]">{sortIndicator("name")}</span>
+                            </button>
+                          </th>
+                          <th className="text-left px-3 py-2 font-medium">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 hover:text-foreground"
+                              onClick={() => onSortColumn("role")}
+                            >
+                              Role
+                              <span className="text-[10px]">{sortIndicator("role")}</span>
+                            </button>
+                          </th>
+                          <th className="text-left px-3 py-2 font-medium">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 hover:text-foreground"
+                              onClick={() => onSortColumn("charisma")}
+                            >
+                              Charisma
+                              <span className="text-[10px]">{sortIndicator("charisma")}</span>
+                            </button>
+                          </th>
+                          <th className="text-left px-3 py-2 font-medium">
+                            <button
+                              type="button"
+                              className="inline-flex items-center gap-1 hover:text-foreground"
+                              onClick={() => onSortColumn("experience")}
+                            >
+                              Experience
+                              <span className="text-[10px]">{sortIndicator("experience")}</span>
+                            </button>
+                          </th>
+                          <th className="text-right px-3 py-2 font-medium">
+                            <button
+                              type="button"
+                              className="ml-auto inline-flex items-center gap-1 hover:text-foreground"
+                              onClick={() => onSortColumn("joinDate")}
+                            >
+                              Join date
+                              <span className="text-[10px]">{sortIndicator("joinDate")}</span>
+                            </button>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {sortedFigures.map((f) => {
+                          const name = f.name ?? f.full_name ?? `Figure #${f.id}`;
+                          const role = positionHolderIds.get(f.id);
+                          const futureRoles = futureRolesByFigureId[f.id] ?? [];
+                          const stats = figureStatsById[f.id];
+                          const imageUrl = safeHttpUrl(stats?.image_url ?? f.image_url);
+                          const wikiHref = safeHttpUrl(stats?.wiki_url ?? f.wiki_url);
+                          const charisma = stats?.charisma ?? f.charisma;
+                          const experience = stats?.experience ?? f.experience;
+                          const charismaBand =
+                            typeof charisma === "number" ? charismaBandIndex(charisma) : null;
+                          const charismaLabel =
+                            typeof charisma === "number" ? charismaBandLabel(charisma) : null;
+                          const experienceTier =
+                            typeof experience === "number" ? experienceTierIndex(experience) : null;
+                          const experienceLabel =
+                            typeof experience === "number" ? experienceTierLabel(experience) : null;
+                          return (
+                            <tr
+                              key={f.id}
+                              className={`border-t border-border ${wikiHref ? "cursor-pointer hover:bg-muted/30" : "cursor-default"}`}
+                              onClick={
+                                wikiHref
+                                  ? () => {
+                                      window.open(wikiHref, "_blank", "noopener,noreferrer");
+                                    }
+                                  : undefined
+                              }
+                            >
+                              <td className="px-3 py-2 font-medium">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className={`h-7 w-7 shrink-0 overflow-hidden rounded-full ${imageUrl ? "bg-muted" : "bg-transparent"}`}
+                                  >
+                                    {imageUrl ? (
+                                      <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+                                    ) : (
+                                      <div className="h-full w-full rounded-full border border-border/40 bg-muted/20" />
+                                    )}
                                   </div>
+                                  <span>{name}</span>
                                 </div>
-                              )}
-                            </td>
-                            <td className="px-3 py-2">
-                              {experiencePct == null ? (
-                                <span className="text-muted-foreground">—</span>
-                              ) : (
-                                <div className="flex items-center gap-2" title={String(experience)}>
-                                  <div className="h-2.5 w-32 overflow-hidden rounded-full bg-muted">
-                                    <div
-                                      className="h-full rounded-full bg-amber-500"
-                                      style={{ width: `${experiencePct}%` }}
-                                    />
+                              </td>
+                              <td className="px-3 py-2">
+                                {role || futureRoles.length > 0 ? (
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    {role && (
+                                      <span
+                                        className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
+                                        style={{
+                                          background: selectedParty?.color ?? "#6b7280",
+                                          color: textForColor(selectedParty?.color ?? "#6b7280"),
+                                          borderColor:
+                                            selectedParty?.color
+                                              ? roleBorderForColor(selectedParty.color)
+                                              : "#374151",
+                                        }}
+                                      >
+                                        {role}
+                                      </span>
+                                    )}
+                                    {futureRoles.map((futureRole) => (
+                                      <span
+                                        key={`${f.id}-${futureRole.label}-${futureRole.hover}`}
+                                        className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                        title={futureRole.hover}
+                                      >
+                                        {futureRole.label}
+                                      </span>
+                                    ))}
                                   </div>
-                                </div>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-right tabular-nums">
-                              {f.created_at_game_month ?? "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Member</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2">
+                                {charismaBand == null ? (
+                                  <span className="text-muted-foreground">—</span>
+                                ) : (
+                                  <div className="flex items-center gap-2" title={charismaLabel ?? undefined}>
+                                    <div className="h-2.5 w-32 overflow-hidden rounded-full border border-border/60 bg-muted/50">
+                                      <div className="flex h-full w-full">
+                                        {CHARISMA_BAND_COLORS.map((colorClass, index) => (
+                                          <div
+                                            key={`${f.id}-charisma-band-${index}`}
+                                            className={`h-full flex-1 ${colorClass} ${index === charismaBand ? "opacity-100" : "opacity-15 grayscale"} ${index > 0 ? "border-l border-black/15" : ""}`}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2">
+                                {experienceTier == null ? (
+                                  <span className="text-muted-foreground">—</span>
+                                ) : (
+                                  <div
+                                    className="flex items-center gap-2"
+                                    title={`${experience} · ${experienceLabel}`}
+                                  >
+                                    <div className="h-2.5 w-32 overflow-hidden rounded-full border border-border/60 bg-muted/50">
+                                      <div className="flex h-full w-full">
+                                        {EXPERIENCE_TIER_COLORS.map((colorClass, index) => (
+                                          <div
+                                            key={`${f.id}-experience-tier-${index}`}
+                                            className={`h-full flex-1 ${colorClass} ${index === experienceTier ? "opacity-100" : "opacity-15"} ${index > 0 ? "border-l border-black/15" : ""}`}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums">
+                                {formatJoinDate(f.created_at_game_month)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="px-1 text-xs text-muted-foreground">
+                    Click any column header to sort this table.
+                  </p>
+                </>
               )}
             </section>
           </>

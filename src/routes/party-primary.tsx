@@ -1751,7 +1751,7 @@ function HorizontalBarResultChart({ data }: { data: HorizontalBarDatum[] }) {
             <LabelList
               dataKey="pctLabel"
               position="right"
-              fill="#0f172a"
+              fill="hsl(var(--foreground))"
               fontSize={12}
               fontWeight={600}
             />
