@@ -1557,7 +1557,7 @@ function PartyPrimaryTool() {
               disabled={exportBusy}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-border bg-background hover:bg-secondary transition-colors disabled:opacity-50"
             >
-              {exportBusy ? "Exporting..." : "Export chart"}
+              {exportBusy ? "Exporting..." : "Download image"}
             </button>
 
             <button
