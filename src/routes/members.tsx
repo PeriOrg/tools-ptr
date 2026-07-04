@@ -48,11 +48,22 @@ type Figure = {
   full_name?: string;
   charisma?: number;
   experience?: number;
-  age?: number;
+  created_at_game_month?: number;
   gender?: string;
   is_active?: boolean;
   party_id?: number;
 };
+
+type FigureStats = {
+  charisma?: number;
+  experience?: number;
+};
+
+function toPercent(value: number, min: number, max: number) {
+  if (max <= min) return 100;
+  const pct = ((value - min) / (max - min)) * 100;
+  return Math.max(0, Math.min(100, pct));
+}
 
 function colorLuma(hex: string) {
   const h = hex.replace("#", "");
@@ -75,6 +86,7 @@ function MembersPage() {
 
   const [positions, setPositions] = useState<Position[] | null>(null);
   const [figures, setFigures] = useState<Figure[] | null>(null);
+  const [figureStatsById, setFigureStatsById] = useState<Record<number, FigureStats>>({});
   const [figuresErr, setFiguresErr] = useState<string | null>(null);
   const [loadingFigures, setLoadingFigures] = useState(false);
 
@@ -141,9 +153,10 @@ function MembersPage() {
   }, [session, authFetch]);
 
   const loadPartyDetail = useCallback(
-    async (id: number) => {
+    async (id: number, nationId: number | null) => {
       setPositions(null);
       setFigures(null);
+      setFigureStatsById({});
       setFiguresErr(null);
       try {
         const r = await fetch(`/api/ptr/parties/${id}/positions`);
@@ -165,6 +178,35 @@ function MembersPage() {
         }
         const data = (await r.json()) as Figure[];
         setFigures(data);
+
+        if (nationId != null) {
+          const figuresNeedingStats = data.filter(
+            (f) => f.charisma == null || f.experience == null,
+          );
+          if (figuresNeedingStats.length > 0) {
+            const statsEntries = await Promise.all(
+              figuresNeedingStats.map(async (f) => {
+                try {
+                  const detailRes = await authFetch(
+                    `/api/ptr/nations/${nationId}/political-figures/${f.id}`,
+                  );
+                  if (!detailRes.ok) return [f.id, {}] as const;
+                  const detail = (await detailRes.json()) as Figure;
+                  return [
+                    f.id,
+                    {
+                      charisma: detail.charisma,
+                      experience: detail.experience,
+                    },
+                  ] as const;
+                } catch {
+                  return [f.id, {}] as const;
+                }
+              }),
+            );
+            setFigureStatsById(Object.fromEntries(statsEntries));
+          }
+        }
       } catch (e) {
         setFiguresErr((e as Error).message);
       } finally {
@@ -175,8 +217,11 @@ function MembersPage() {
   );
 
   useEffect(() => {
-    if (partyId != null) void loadPartyDetail(partyId);
-  }, [partyId, loadPartyDetail]);
+    if (partyId != null) {
+      const nationId = myParties?.find((p) => p.id === partyId)?.nation_id ?? null;
+      void loadPartyDetail(partyId, nationId);
+    }
+  }, [partyId, myParties, loadPartyDetail]);
 
   const selectedParty = useMemo(
     () => myParties?.find((p) => p.id === partyId) ?? null,
@@ -200,6 +245,28 @@ function MembersPage() {
       return (a.name ?? a.full_name ?? "").localeCompare(b.name ?? b.full_name ?? "");
     });
   }, [figures, positionHolderIds]);
+
+  const statRange = useMemo(() => {
+    if (!sortedFigures || sortedFigures.length === 0) return null;
+
+    const charismaValues: number[] = [];
+    const experienceValues: number[] = [];
+
+    sortedFigures.forEach((f) => {
+      const stats = figureStatsById[f.id];
+      const charisma = stats?.charisma ?? f.charisma;
+      const experience = stats?.experience ?? f.experience;
+      if (typeof charisma === "number") charismaValues.push(charisma);
+      if (typeof experience === "number") experienceValues.push(experience);
+    });
+
+    return {
+      charismaMin: charismaValues.length ? Math.min(...charismaValues) : null,
+      charismaMax: charismaValues.length ? Math.max(...charismaValues) : null,
+      experienceMin: experienceValues.length ? Math.min(...experienceValues) : null,
+      experienceMax: experienceValues.length ? Math.max(...experienceValues) : null,
+    };
+  }, [sortedFigures, figureStatsById]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -302,20 +369,39 @@ function MembersPage() {
                 <div className="text-sm text-muted-foreground">No members found.</div>
               ) : (
                 <div className="rounded-lg border border-border overflow-x-auto">
-                  <table className="min-w-[760px] w-full text-sm">
+                  <table className="min-w-[900px] w-full text-sm">
                     <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                       <tr>
                         <th className="text-left px-3 py-2 font-medium">Name</th>
                         <th className="text-left px-3 py-2 font-medium">Role</th>
-                        <th className="text-right px-3 py-2 font-medium">Charisma</th>
-                        <th className="text-right px-3 py-2 font-medium">Experience</th>
-                        <th className="text-right px-3 py-2 font-medium">Age</th>
+                        <th className="text-left px-3 py-2 font-medium">Charisma</th>
+                        <th className="text-left px-3 py-2 font-medium">Experience</th>
+                        <th className="text-right px-3 py-2 font-medium">Join date</th>
                       </tr>
                     </thead>
                     <tbody>
                       {sortedFigures.map((f) => {
                         const name = f.name ?? f.full_name ?? `Figure #${f.id}`;
                         const role = positionHolderIds.get(f.id);
+                        const stats = figureStatsById[f.id];
+                        const charisma = stats?.charisma ?? f.charisma;
+                        const experience = stats?.experience ?? f.experience;
+                        const charismaPct =
+                          typeof charisma === "number" &&
+                          statRange?.charismaMin != null &&
+                          statRange.charismaMax != null
+                            ? toPercent(charisma, statRange.charismaMin, statRange.charismaMax)
+                            : null;
+                        const experiencePct =
+                          typeof experience === "number" &&
+                          statRange?.experienceMin != null &&
+                          statRange.experienceMax != null
+                            ? toPercent(
+                                experience,
+                                statRange.experienceMin,
+                                statRange.experienceMax,
+                              )
+                            : null;
                         return (
                           <tr key={f.id} className="border-t border-border">
                             <td className="px-3 py-2 font-medium">{name}</td>
@@ -328,9 +414,37 @@ function MembersPage() {
                                 <span className="text-xs text-muted-foreground">Member</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-right tabular-nums">{f.charisma ?? "—"}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{f.experience ?? "—"}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{f.age ?? "—"}</td>
+                            <td className="px-3 py-2">
+                              {charismaPct == null ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <div className="flex items-center gap-2" title={String(charisma)}>
+                                  <div className="h-2.5 w-32 overflow-hidden rounded-full bg-muted">
+                                    <div
+                                      className="h-full rounded-full bg-sky-500"
+                                      style={{ width: `${charismaPct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2">
+                              {experiencePct == null ? (
+                                <span className="text-muted-foreground">—</span>
+                              ) : (
+                                <div className="flex items-center gap-2" title={String(experience)}>
+                                  <div className="h-2.5 w-32 overflow-hidden rounded-full bg-muted">
+                                    <div
+                                      className="h-full rounded-full bg-amber-500"
+                                      style={{ width: `${experiencePct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {f.created_at_game_month ?? "—"}
+                            </td>
                           </tr>
                         );
                       })}
