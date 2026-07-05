@@ -48,6 +48,9 @@ type Figure = {
   full_name?: string;
   charisma?: number;
   experience?: number;
+  charisma_band?: string;
+  experience_band?: string;
+  experience_breakdown?: Record<string, number>;
   image_url?: string | null;
   wiki_url?: string | null;
   created_at_game_month?: number | string;
@@ -59,6 +62,9 @@ type Figure = {
 type FigureStats = {
   charisma?: number;
   experience?: number;
+  charisma_band?: string;
+  experience_band?: string;
+  experience_breakdown?: Record<string, number>;
   image_url?: string | null;
   wiki_url?: string | null;
 };
@@ -173,6 +179,55 @@ function experienceTierIndex(value: number) {
 
 function experienceTierLabel(value: number) {
   return EXPERIENCE_TIER_LABELS[experienceTierIndex(value)];
+}
+
+function experienceBandColorClass(label: string | null | undefined): string {
+  if (!label) return "bg-amber-500";
+  const index = experienceTierIndexFromLabel(label);
+  if (index !== null) return EXPERIENCE_TIER_COLORS[index];
+  return "bg-amber-500";
+}
+
+function charismaBandIndexFromLabel(label: string | undefined): number | null {
+  if (!label) return null;
+  const normalized = label.toLowerCase().replace(/-/g, "");
+  const index = CHARISMA_BAND_LABELS.findIndex(
+    (l) => l.toLowerCase().replace(/-/g, "") === normalized,
+  );
+  return index >= 0 ? index : null;
+}
+
+function experienceTierIndexFromLabel(label: string | undefined): number | null {
+  if (!label) return null;
+  const index = EXPERIENCE_TIER_LABELS.findIndex(
+    (l) => l.toLowerCase() === label.toLowerCase(),
+  );
+  return index >= 0 ? index : null;
+}
+
+function formatExperienceLabel(key: string): string {
+  // Replace 'hos' with 'Presidency', remove 'total' and 'office', and format the rest
+  let label = key
+    .toLowerCase()
+    .replace(/hos/g, "Presidency")
+    .replace(/\s*total\s*/g, " ")
+    .replace(/\s*office\s*/g, " ")
+    .trim()
+    .replace(/_/g, " ");
+  
+  // Capitalize first letter of each word
+  return label
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function getExperienceBreakdownTooltip(key: string): string {
+  // Return the formatted key with underscores and capitalization for tooltip
+  return key
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function parseYearMonth(value: number | string | null | undefined) {
@@ -386,6 +441,11 @@ function MembersPage() {
   const [figuresErr, setFiguresErr] = useState<string | null>(null);
   const [loadingFigures, setLoadingFigures] = useState(false);
   const [memberSort, setMemberSort] = useState<MemberSortConfig | null>(null);
+  const [experienceBreakdownFigureId, setExperienceBreakdownFigureId] = useState<number | null>(null);
+  const [experienceBreakdownData, setExperienceBreakdownData] = useState<Record<string, number> | null>(null);
+  const [experienceBreakdownName, setExperienceBreakdownName] = useState<string | null>(null);
+  const [experienceBreakdownBand, setExperienceBreakdownBand] = useState<string | null>(null);
+  const [isClosingModal, setIsClosingModal] = useState(false);
 
   // Fetch the signed-in user's party(ies)
   useEffect(() => {
@@ -537,6 +597,9 @@ function MembersPage() {
                       ...existing,
                       charisma: detail.charisma ?? existing.charisma,
                       experience: detail.experience ?? existing.experience,
+                      charisma_band: detail.charisma_band ?? existing.charisma_band,
+                      experience_band: detail.experience_band ?? existing.experience_band,
+                      experience_breakdown: detail.experience_breakdown ?? existing.experience_breakdown,
                       image_url: detail.image_url ?? existing.image_url,
                       wiki_url: detail.wiki_url ?? existing.wiki_url,
                     },
@@ -604,10 +667,15 @@ function MembersPage() {
       const bRole =
         positionHolderIds.get(b.id) ?? futureRolesByFigureId[b.id]?.[0]?.label ?? "Member";
 
-      const aCharisma = aStats?.charisma ?? a.charisma ?? null;
-      const bCharisma = bStats?.charisma ?? b.charisma ?? null;
-      const aExperience = aStats?.experience ?? a.experience ?? null;
-      const bExperience = bStats?.experience ?? b.experience ?? null;
+      const aCharismaBandIndex = charismaBandIndexFromLabel(aStats?.charisma_band ?? a.charisma_band);
+      const bCharismaBandIndex = charismaBandIndexFromLabel(bStats?.charisma_band ?? b.charisma_band);
+      const aCharisma = aCharismaBandIndex ?? aStats?.charisma ?? a.charisma ?? null;
+      const bCharisma = bCharismaBandIndex ?? bStats?.charisma ?? b.charisma ?? null;
+
+      const aExperienceTierIndex = experienceTierIndexFromLabel(aStats?.experience_band ?? a.experience_band);
+      const bExperienceTierIndex = experienceTierIndexFromLabel(bStats?.experience_band ?? b.experience_band);
+      const aExperience = aExperienceTierIndex ?? aStats?.experience ?? a.experience ?? null;
+      const bExperience = bExperienceTierIndex ?? bStats?.experience ?? b.experience ?? null;
 
       const aJoinSort = joinDateSortValue(a.created_at_game_month);
       const bJoinSort = joinDateSortValue(b.created_at_game_month);
@@ -837,30 +905,35 @@ function MembersPage() {
                           const stats = figureStatsById[f.id];
                           const imageUrl = safeHttpUrl(stats?.image_url ?? f.image_url);
                           const wikiHref = safeHttpUrl(stats?.wiki_url ?? f.wiki_url);
-                          const charisma = stats?.charisma ?? f.charisma;
-                          const experience = stats?.experience ?? f.experience;
-                          const charismaBand =
-                            typeof charisma === "number" ? charismaBandIndex(charisma) : null;
-                          const charismaLabel =
-                            typeof charisma === "number" ? charismaBandLabel(charisma) : null;
-                          const experienceTier =
-                            typeof experience === "number" ? experienceTierIndex(experience) : null;
-                          const experienceLabel =
-                            typeof experience === "number" ? experienceTierLabel(experience) : null;
+                          
+                          const charismaBandStr = stats?.charisma_band ?? f.charisma_band;
+                          const charismaNum = stats?.charisma ?? f.charisma;
+                          const charismaBandIndex_val = charismaBandIndexFromLabel(charismaBandStr);
+                          const charismaBand = charismaBandIndex_val !== null ? charismaBandIndex_val : (typeof charismaNum === "number" ? charismaBandIndex(charismaNum) : null);
+                          const charismaLabel = charismaBandStr ?? (typeof charismaNum === "number" ? charismaBandLabel(charismaNum) : null);
+                          
+                          const experienceBandStr = stats?.experience_band ?? f.experience_band;
+                          const experienceNum = stats?.experience ?? f.experience;
+                          const experienceTierIndex_val = experienceTierIndexFromLabel(experienceBandStr);
+                          const experienceTier = experienceTierIndex_val !== null ? experienceTierIndex_val : (typeof experienceNum === "number" ? experienceTierIndex(experienceNum) : null);
+                          const experienceLabel = experienceBandStr ?? (typeof experienceNum === "number" ? experienceTierLabel(experienceNum) : null);
                           return (
                             <tr
                               key={f.id}
-                              className={`border-t border-border ${wikiHref ? "cursor-pointer hover:bg-muted/30" : "cursor-default"}`}
-                              onClick={
-                                wikiHref
-                                  ? () => {
-                                      window.open(wikiHref, "_blank", "noopener,noreferrer");
-                                    }
-                                  : undefined
-                              }
+                              className="border-t border-border"
                             >
                               <td className="px-3 py-2 font-medium">
-                                <div className="flex items-center gap-2">
+                                <div
+                                  className="flex items-center gap-2"
+                                  onClick={
+                                    wikiHref
+                                      ? () => {
+                                          window.open(wikiHref, "_blank", "noopener,noreferrer");
+                                        }
+                                      : undefined
+                                  }
+                                  style={{ cursor: wikiHref ? "pointer" : "default" }}
+                                >
                                   <div
                                     className={`h-7 w-7 shrink-0 overflow-hidden rounded-full ${imageUrl ? "bg-muted" : "bg-transparent"}`}
                                   >
@@ -870,7 +943,7 @@ function MembersPage() {
                                       <div className="h-full w-full rounded-full border border-border/40 bg-muted/20" />
                                     )}
                                   </div>
-                                  <span>{name}</span>
+                                  <span className={wikiHref ? "hover:underline" : ""}>{name}</span>
                                 </div>
                               </td>
                               <td className="px-3 py-2">
@@ -928,8 +1001,15 @@ function MembersPage() {
                                   <span className="text-muted-foreground">—</span>
                                 ) : (
                                   <div
-                                    className="flex items-center gap-2"
-                                    title={`${experience} · ${experienceLabel}`}
+                                    className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                    title={`${experienceLabel} (click for breakdown)`}
+                                    onClick={() => {
+                                      setExperienceBreakdownFigureId(f.id);
+                                      const breakdown = figureStatsById[f.id]?.experience_breakdown ?? f.experience_breakdown;
+                                      setExperienceBreakdownData(breakdown ?? null);
+                                      setExperienceBreakdownName(name);
+                                      setExperienceBreakdownBand(experienceLabel);
+                                    }}
                                   >
                                     <div className="h-2.5 w-32 overflow-hidden rounded-full border border-border/60 bg-muted/50">
                                       <div className="flex h-full w-full">
@@ -956,6 +1036,104 @@ function MembersPage() {
                   <p className="px-1 text-xs text-muted-foreground">
                     Click any column header to sort this table.
                   </p>
+                  
+                  {experienceBreakdownFigureId !== null && experienceBreakdownData && (
+                    <div 
+                      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-200 ${
+                        isClosingModal ? "opacity-0" : "opacity-100"
+                      }`}
+                      onClick={() => {
+                        setIsClosingModal(true);
+                        setTimeout(() => {
+                          setExperienceBreakdownFigureId(null);
+                          setIsClosingModal(false);
+                        }, 200);
+                      }}
+                    >
+                      <style>{`
+                        @keyframes slideInScale {
+                          from {
+                            opacity: 0;
+                            transform: scale(0.95);
+                          }
+                          to {
+                            opacity: 1;
+                            transform: scale(1);
+                          }
+                        }
+                        @keyframes slideOutScale {
+                          from {
+                            opacity: 1;
+                            transform: scale(1);
+                          }
+                          to {
+                            opacity: 0;
+                            transform: scale(0.95);
+                          }
+                        }
+                        .modal-open {
+                          animation: slideInScale 0.2s ease-out;
+                        }
+                        .modal-close {
+                          animation: slideOutScale 0.2s ease-in;
+                        }
+                      `}</style>
+                      <div
+                        className={`bg-card border border-border rounded-lg p-6 max-w-sm w-full mx-4 shadow-lg ${
+                          isClosingModal ? "modal-close" : "modal-open"
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-lg font-semibold text-foreground">Experience Breakdown</h3>
+                          <button
+                            className="text-muted-foreground hover:text-foreground transition-colors ml-2 flex-shrink-0"
+                            onClick={() => {
+                              setIsClosingModal(true);
+                              setTimeout(() => {
+                                setExperienceBreakdownFigureId(null);
+                                setIsClosingModal(false);
+                              }, 200);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            {experienceBreakdownName && (
+                              <p className="text-sm text-muted-foreground">{experienceBreakdownName}</p>
+                            )}
+                          </div>
+                          {experienceBreakdownBand && (
+                            <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400">
+                              {experienceBreakdownBand}
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-3">
+                          {Object.entries(experienceBreakdownData)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([key, value]) => (
+                              <div key={key} className="flex items-center justify-between text-sm" title={getExperienceBreakdownTooltip(key)}>
+                                <span className="text-muted-foreground font-medium cursor-help">{formatExperienceLabel(key)}</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 bg-muted rounded flex-1 w-24">
+                                    <div
+                                      className={`h-full ${experienceBandColorClass(experienceBreakdownBand)} rounded transition-all duration-300`}
+                                      style={{
+                                        width: `${(value / Math.max(...Object.values(experienceBreakdownData))) * 100}%`,
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="font-medium w-12 text-right text-foreground">{value}</span>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </section>

@@ -680,7 +680,7 @@ function PollingTool() {
                     ? "Projected seats"
                     : "Projected parliament"}
               </h2>
-              <span className="text-xs text-muted-foreground">{poll.game_month}</span>
+              <span className="text-xs text-muted-foreground">{formatGameMonth(poll.game_month)}</span>
             </div>
             {mode === "estimate" && (
               <p className="text-xs text-muted-foreground italic">
