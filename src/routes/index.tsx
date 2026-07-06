@@ -62,6 +62,7 @@ function HomePage() {
       <section className="mb-12">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Tools</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <ToolCard to="/nation" title="Nation" desc="See current holders of national offices, starting with Head of State." />
           <ToolCard to="/polls" title="Polling" desc="Visualise national polls, projected seats and D'Hondt parliament estimates." />
           <ToolCard to="/majority" title="Majority calculator" desc="Simulate Yes / Abstain / No votes to check simple, absolute and supermajorities." />
           <ToolCard to="/members" title="Members" desc="Browse party internal positions and political figures (sign-in required)." />
