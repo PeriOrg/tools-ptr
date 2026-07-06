@@ -33,6 +33,7 @@ import { SignInBadge } from "../components/SignInBadge";
 
 const NAV_ITEMS = [
   { to: "/", label: "Home", exact: true },
+  { to: "/nation", label: "Nation" },
   { to: "/polls", label: "Polling" },
   { to: "/majority", label: "Majority Calculator" },
   { to: "/members", label: "Members" },
@@ -226,19 +227,19 @@ function RootComponent() {
         <NationProvider>
           <nav className="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
             <div className="px-3 sm:px-6">
-              <div className="py-2 md:flex md:h-11 md:items-stretch md:py-0">
+              <div className="py-2 lg:flex lg:h-11 lg:items-stretch lg:py-0">
 
-                <div className="flex items-center justify-between gap-3 md:shrink-0 md:pr-4">
-                  <div className="flex min-w-0 items-center gap-2">
+                <div className="flex items-center justify-between gap-3 lg:shrink-0 lg:pr-4">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
                     <img src={logoUrl} alt="PR:R Tools" className="h-6 w-6 rounded-sm" />
                     <span className="truncate text-sm font-semibold tracking-tight text-foreground">PR:R Tools</span>
                   </div>
-                  <div className="min-w-[160px] max-w-[220px] flex-1 md:hidden">
+                  <div className="w-[175px] shrink-0 lg:hidden">
                     <NationPicker />
                   </div>
                 </div>
 
-                <div className="mt-2 flex items-center gap-1 md:hidden">
+                <div className="mt-2 flex items-center gap-1 lg:hidden">
                   <div className="grid min-w-0 flex-1 grid-cols-3 gap-1">
                     {MOBILE_PRIMARY_NAV_ITEMS.map(({ to, label, exact }) => (
                       <MobileNavLink key={to} to={to} label={label} exact={exact} />
@@ -247,12 +248,12 @@ function RootComponent() {
                   {MOBILE_OVERFLOW_NAV_ITEMS.length > 0 && <MobileToolsMenu />}
                 </div>
 
-                <div className="mt-2 md:hidden">
+                <div className="mt-2 lg:hidden">
                   <SignInBadge />
                 </div>
 
-                <div className="hidden md:flex md:min-w-0 md:flex-1 md:items-stretch">
-                  <div className="flex items-stretch gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:flex-1 md:overflow-visible">
+                <div className="hidden lg:flex lg:min-w-0 lg:flex-1 lg:items-stretch">
+                  <div className="flex flex-1 items-stretch gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {NAV_ITEMS.map(({ to, label, exact }) => (
                       <Link
                         key={to}
@@ -267,7 +268,7 @@ function RootComponent() {
                     ))}
                   </div>
 
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ml-auto flex shrink-0 items-center gap-2">
                     <div className="w-[175px]">
                       <NationPicker />
                     </div>
