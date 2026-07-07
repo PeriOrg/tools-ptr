@@ -24,6 +24,7 @@ export const Route = createFileRoute("/polls")({
 
 const API = "/api/ptr";
 const FALLBACK_COLOR = "#999999";
+const POLLS_USE_THRESHOLD_KEY = "polls:use-current-threshold";
 
 type Nation = { id: number; name: string };
 
@@ -196,7 +197,11 @@ function PollingTool() {
   const [pollsLoading, setPollsLoading] = useState(false);
 
   const [pollId, setPollId] = useState<number | null>(null);
-  const [forceSeatThreshold, setForceSeatThreshold] = useState(true);
+  const [forceSeatThreshold, setForceSeatThreshold] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    const saved = window.localStorage.getItem(POLLS_USE_THRESHOLD_KEY);
+    return saved == null ? true : saved === "1";
+  });
   const [poll, setPoll] = useState<PollDetail | null>(null);
   const [pollErr, setPollErr] = useState<string | null>(null);
   const [pollLoading, setPollLoading] = useState(false);
@@ -298,6 +303,11 @@ function PollingTool() {
       });
   }, [nationId]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(POLLS_USE_THRESHOLD_KEY, forceSeatThreshold ? "1" : "0");
+  }, [forceSeatThreshold]);
+
   // Selected poll detail
   useEffect(() => {
     if (nationId == null || pollId == null) return;
@@ -379,7 +389,14 @@ function PollingTool() {
     if (!poll) return [];
     const parties = poll.parties;
     if (mode === "poll") {
-      return [...parties].sort((a, b) => b.support_pct - a.support_pct);
+      return parties
+        .map((party) => ({
+          ...party,
+          projected_seats: forceSeatThreshold
+            ? party.projected_seats_with_threshold
+            : party.projected_seats,
+        }))
+        .sort((a, b) => b.support_pct - a.support_pct);
     }
     if (mode === "seats") {
       return parties
