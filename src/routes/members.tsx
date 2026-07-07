@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/EmptyState";
+import { fetchNationFlag } from "../lib/nations";
 import { usePtrAuth } from "../lib/ptr-auth";
 
 export const Route = createFileRoute("/members")({
@@ -35,6 +36,7 @@ type MyParty = {
   logo_url: string | null;
   seat_count?: number;
   nation_id?: number;
+  nation_name?: string;
 };
 type Position = {
   id: number;
@@ -48,6 +50,9 @@ type Figure = {
   full_name?: string;
   charisma?: number;
   experience?: number;
+  charisma_band?: string;
+  experience_band?: string;
+  experience_breakdown?: Record<string, number>;
   image_url?: string | null;
   wiki_url?: string | null;
   created_at_game_month?: number | string;
@@ -56,11 +61,59 @@ type Figure = {
   party_id?: number;
 };
 
+type DetailLabel = {
+  is_current?: boolean;
+};
+
+type HosTerm = {
+  is_current?: boolean;
+  label?: DetailLabel | null;
+  title_at_term_start?: string | null;
+  term_start_month?: number | string | null;
+  term_end_month?: number | string | null;
+  term_start_game_month?: number | string | null;
+  term_end_game_month?: number | string | null;
+};
+
+type CabinetPosition = {
+  is_current?: boolean;
+  label?: DetailLabel | null;
+  ministry_display_name?: string | null;
+  ministry_name?: string | null;
+  start_month?: number | string | null;
+  end_month?: number | string | null;
+  term_start_month?: number | string | null;
+  term_end_month?: number | string | null;
+  term_start_game_month?: number | string | null;
+  term_end_game_month?: number | string | null;
+  start_game_month?: number | string | null;
+  end_game_month?: number | string | null;
+};
+
+type PositionHeld = {
+  position_title?: string | null;
+  term_start_game_month?: number | string | null;
+  term_end_game_month?: number | string | null;
+  is_current?: boolean;
+};
+
+type FigureDetail = Figure & {
+  hos_terms?: HosTerm[];
+  cabinet_positions?: CabinetPosition[];
+  positions_held?: PositionHeld[];
+};
+
 type FigureStats = {
   charisma?: number;
   experience?: number;
+  charisma_band?: string;
+  experience_band?: string;
+  experience_breakdown?: Record<string, number>;
   image_url?: string | null;
   wiki_url?: string | null;
+  hos_terms?: HosTerm[];
+  cabinet_positions?: CabinetPosition[];
+  positions_held?: PositionHeld[];
 };
 
 type MinisterAssignment = {
@@ -73,6 +126,19 @@ type MinisterAssignment = {
 type FutureRolePill = {
   label: string;
   hover: string;
+};
+
+type OfficialPositionPill = {
+  source: "hos" | "cabinet";
+  label: string;
+};
+
+type RoleHistoryEntry = {
+  category: "Head of State" | "Cabinet" | "Party Position";
+  title: string;
+  startMonth: number | string | null;
+  endMonth: number | string | null;
+  isCurrent: boolean;
 };
 
 type MemberSortKey = "name" | "role" | "charisma" | "experience" | "joinDate";
@@ -173,6 +239,55 @@ function experienceTierIndex(value: number) {
 
 function experienceTierLabel(value: number) {
   return EXPERIENCE_TIER_LABELS[experienceTierIndex(value)];
+}
+
+function experienceBandColorClass(label: string | null | undefined): string {
+  if (!label) return "bg-amber-500";
+  const index = experienceTierIndexFromLabel(label);
+  if (index !== null) return EXPERIENCE_TIER_COLORS[index];
+  return "bg-amber-500";
+}
+
+function charismaBandIndexFromLabel(label: string | undefined): number | null {
+  if (!label) return null;
+  const normalized = label.toLowerCase().replace(/-/g, "");
+  const index = CHARISMA_BAND_LABELS.findIndex(
+    (l) => l.toLowerCase().replace(/-/g, "") === normalized,
+  );
+  return index >= 0 ? index : null;
+}
+
+function experienceTierIndexFromLabel(label: string | undefined): number | null {
+  if (!label) return null;
+  const index = EXPERIENCE_TIER_LABELS.findIndex(
+    (l) => l.toLowerCase() === label.toLowerCase(),
+  );
+  return index >= 0 ? index : null;
+}
+
+function formatExperienceLabel(key: string): string {
+  // Replace 'hos' with 'Presidency', remove 'total' and 'office', and format the rest
+  let label = key
+    .toLowerCase()
+    .replace(/hos/g, "Presidency")
+    .replace(/\s*total\s*/g, " ")
+    .replace(/\s*office\s*/g, " ")
+    .trim()
+    .replace(/_/g, " ");
+  
+  // Capitalize first letter of each word
+  return label
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function getExperienceBreakdownTooltip(key: string): string {
+  // Return the formatted key with underscores and capitalization for tooltip
+  return key
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function parseYearMonth(value: number | string | null | undefined) {
@@ -323,6 +438,100 @@ function nomineeHoverText(name: string) {
   return `Party nominee for ${trimmed}`;
 }
 
+function formatHosTitleWithNation(title: string, nationName: string | null | undefined): string {
+  const trimmedTitle = title.trim();
+  const trimmedNation = nationName?.trim() ?? "";
+  if (!trimmedTitle || !trimmedNation) return trimmedTitle;
+  if (/\bof\b/i.test(trimmedTitle)) return trimmedTitle;
+  return `${trimmedTitle} of ${trimmedNation}`;
+}
+
+function currentOfficialPositions(
+  stats: FigureStats | undefined,
+  nationName: string | null | undefined,
+): OfficialPositionPill[] {
+  if (!stats) return [];
+
+  const hos = (stats.hos_terms ?? [])
+    .filter((term) => term?.is_current === true || term?.label?.is_current === true)
+    .map((term) => formatHosTitleWithNation(term?.title_at_term_start?.trim() ?? "", nationName))
+    .filter((label) => label.length > 0)
+    .map((label) => ({ source: "hos" as const, label }));
+
+  const cabinet = (stats.cabinet_positions ?? [])
+    .filter((position) => position?.is_current === true || position?.label?.is_current === true)
+    .map((position) => position?.ministry_display_name?.trim() ?? "")
+    .filter((label) => label.length > 0)
+    .map((label) => ({ source: "cabinet" as const, label }));
+
+  return [...hos, ...cabinet];
+}
+
+function buildRoleHistoryEntries(
+  stats: FigureStats | undefined,
+  nationName: string | null | undefined,
+): RoleHistoryEntry[] {
+  if (!stats) return [];
+
+  const entries: RoleHistoryEntry[] = [];
+
+  (stats.hos_terms ?? []).forEach((term) => {
+    const titleRaw = term?.title_at_term_start?.trim() ?? "";
+    const title = formatHosTitleWithNation(titleRaw, nationName);
+    if (!title) return;
+    const isCurrent = term?.is_current === true || term?.label?.is_current === true;
+    entries.push({
+      category: "Head of State",
+      title,
+      startMonth: term?.term_start_month ?? term?.term_start_game_month ?? null,
+      endMonth: term?.term_end_month ?? term?.term_end_game_month ?? null,
+      isCurrent,
+    });
+  });
+
+  (stats.cabinet_positions ?? []).forEach((position) => {
+    const title = (position?.ministry_display_name ?? position?.ministry_name ?? "").trim();
+    if (!title) return;
+    const isCurrent = position?.is_current === true || position?.label?.is_current === true;
+    entries.push({
+      category: "Cabinet",
+      title,
+      startMonth:
+        position?.start_month ??
+        position?.term_start_month ??
+        position?.term_start_game_month ??
+        position?.start_game_month ??
+        null,
+      endMonth:
+        position?.end_month ??
+        position?.term_end_month ??
+        position?.term_end_game_month ??
+        position?.end_game_month ??
+        null,
+      isCurrent,
+    });
+  });
+
+  (stats.positions_held ?? []).forEach((position) => {
+    const title = (position?.position_title ?? "").trim();
+    if (!title) return;
+    entries.push({
+      category: "Party Position",
+      title,
+      startMonth: position?.term_start_game_month ?? null,
+      endMonth: position?.term_end_game_month ?? null,
+      isCurrent: position?.is_current === true,
+    });
+  });
+
+  return entries.sort((a, b) => {
+    if (a.isCurrent !== b.isCurrent) return a.isCurrent ? -1 : 1;
+    const aStart = joinDateSortValue(a.startMonth);
+    const bStart = joinDateSortValue(b.startMonth);
+    return compareNullableNumbers(aStart, bStart, "desc");
+  });
+}
+
 function PositionHallCard({
   holderName,
   positionTitle,
@@ -383,9 +592,20 @@ function MembersPage() {
   const [figures, setFigures] = useState<Figure[] | null>(null);
   const [figureStatsById, setFigureStatsById] = useState<Record<number, FigureStats>>({});
   const [futureRolesByFigureId, setFutureRolesByFigureId] = useState<Record<number, FutureRolePill[]>>({});
+  const [nationNameById, setNationNameById] = useState<Record<number, string>>({});
+  const [nationFlagUrlById, setNationFlagUrlById] = useState<Record<number, string | null>>({});
   const [figuresErr, setFiguresErr] = useState<string | null>(null);
   const [loadingFigures, setLoadingFigures] = useState(false);
   const [memberSort, setMemberSort] = useState<MemberSortConfig | null>(null);
+  const [experienceBreakdownFigureId, setExperienceBreakdownFigureId] = useState<number | null>(null);
+  const [experienceBreakdownData, setExperienceBreakdownData] = useState<Record<string, number> | null>(null);
+  const [experienceBreakdownName, setExperienceBreakdownName] = useState<string | null>(null);
+  const [experienceBreakdownBand, setExperienceBreakdownBand] = useState<string | null>(null);
+  const [roleHistoryFigureId, setRoleHistoryFigureId] = useState<number | null>(null);
+  const [roleHistoryName, setRoleHistoryName] = useState<string | null>(null);
+  const [roleHistoryEntries, setRoleHistoryEntries] = useState<RoleHistoryEntry[]>([]);
+  const [isClosingModal, setIsClosingModal] = useState(false);
+  const [isClosingRoleHistoryModal, setIsClosingRoleHistoryModal] = useState(false);
 
   // Fetch the signed-in user's party(ies)
   useEffect(() => {
@@ -418,6 +638,7 @@ function MembersPage() {
           logo_url: p.logo_url ?? null,
           seat_count: p.seat_count,
           nation_id: p.nation_id,
+          nation_name: p.nation_name,
         }));
         // Enrich missing fields (abbreviation/color/logo) from /parties/{id}
         const enriched = await Promise.all(
@@ -435,6 +656,7 @@ function MembersPage() {
                 logo_url: p.logo_url || j.logo_url || null,
                 seat_count: p.seat_count ?? j.seat_count,
                 nation_id: p.nation_id ?? j.nation_id,
+                nation_name: p.nation_name ?? j.nation_name ?? j.nation?.name,
               } as MyParty;
             } catch {
               return p;
@@ -442,6 +664,15 @@ function MembersPage() {
           }),
         );
         setMyParties(enriched);
+        setNationNameById((prev) => {
+          const next = { ...prev };
+          enriched.forEach((party) => {
+            if (party.nation_id != null && party.nation_name) {
+              next[party.nation_id] = party.nation_name;
+            }
+          });
+          return next;
+        });
         setPartyId(enriched[0]?.id ?? null);
       } catch (e) {
         setMyPartiesErr((e as Error).message);
@@ -456,6 +687,42 @@ function MembersPage() {
       setFigureStatsById({});
       setFutureRolesByFigureId({});
       setFiguresErr(null);
+
+      if (nationId != null && !nationNameById[nationId]) {
+        void (async () => {
+          try {
+            const nationRes = await fetch(`/api/ptr/nations/${nationId}`);
+            if (!nationRes.ok) return;
+            const nation = await nationRes.json();
+            const name = typeof nation?.name === "string" ? nation.name.trim() : "";
+            if (!name) return;
+            setNationNameById((prev) => ({
+              ...prev,
+              [nationId]: name,
+            }));
+          } catch {
+            // Keep nation lookup best-effort and non-blocking.
+          }
+        })();
+      }
+
+      if (nationId != null && nationFlagUrlById[nationId] === undefined) {
+        void (async () => {
+          try {
+            const flagUrl = await fetchNationFlag(nationId);
+            setNationFlagUrlById((prev) => ({
+              ...prev,
+              [nationId]: safeHttpUrl(flagUrl),
+            }));
+          } catch {
+            setNationFlagUrlById((prev) => ({
+              ...prev,
+              [nationId]: null,
+            }));
+          }
+        })();
+      }
+
       try {
         const r = await fetch(`/api/ptr/parties/${id}/positions`);
         if (r.ok) setPositions(await r.json());
@@ -528,7 +795,7 @@ function MembersPage() {
                   `/api/ptr/nations/${nationId}/political-figures/${f.id}`,
                 );
                 if (!detailRes.ok) return;
-                const detail = (await detailRes.json()) as Figure;
+                const detail = (await detailRes.json()) as FigureDetail;
                 setFigureStatsById((prev) => {
                   const existing = prev[f.id] ?? {};
                   return {
@@ -537,8 +804,14 @@ function MembersPage() {
                       ...existing,
                       charisma: detail.charisma ?? existing.charisma,
                       experience: detail.experience ?? existing.experience,
+                      charisma_band: detail.charisma_band ?? existing.charisma_band,
+                      experience_band: detail.experience_band ?? existing.experience_band,
+                      experience_breakdown: detail.experience_breakdown ?? existing.experience_breakdown,
                       image_url: detail.image_url ?? existing.image_url,
                       wiki_url: detail.wiki_url ?? existing.wiki_url,
+                      hos_terms: detail.hos_terms ?? existing.hos_terms,
+                      cabinet_positions: detail.cabinet_positions ?? existing.cabinet_positions,
+                      positions_held: detail.positions_held ?? existing.positions_held,
                     },
                   };
                 });
@@ -554,7 +827,7 @@ function MembersPage() {
         setLoadingFigures(false);
       }
     },
-    [authFetch],
+    [authFetch, nationNameById, nationFlagUrlById],
   );
 
   useEffect(() => {
@@ -568,6 +841,20 @@ function MembersPage() {
     () => myParties?.find((p) => p.id === partyId) ?? null,
     [myParties, partyId],
   );
+
+  const selectedNationName = useMemo(() => {
+    const byParty = selectedParty?.nation_name?.trim();
+    if (byParty) return byParty;
+    const nationId = selectedParty?.nation_id;
+    if (nationId == null) return null;
+    return nationNameById[nationId] ?? null;
+  }, [selectedParty, nationNameById]);
+
+  const selectedNationFlagUrl = useMemo(() => {
+    const nationId = selectedParty?.nation_id;
+    if (nationId == null) return null;
+    return nationFlagUrlById[nationId] ?? null;
+  }, [selectedParty?.nation_id, nationFlagUrlById]);
 
   const positionHolderIds = useMemo(() => {
     const m = new Map<number, string>();
@@ -599,15 +886,29 @@ function MembersPage() {
       const aStats = figureStatsById[a.id];
       const bStats = figureStatsById[b.id];
 
-      const aRole =
-        positionHolderIds.get(a.id) ?? futureRolesByFigureId[a.id]?.[0]?.label ?? "Member";
-      const bRole =
-        positionHolderIds.get(b.id) ?? futureRolesByFigureId[b.id]?.[0]?.label ?? "Member";
+      const aOfficialPositions = currentOfficialPositions(aStats, selectedNationName);
+      const bOfficialPositions = currentOfficialPositions(bStats, selectedNationName);
 
-      const aCharisma = aStats?.charisma ?? a.charisma ?? null;
-      const bCharisma = bStats?.charisma ?? b.charisma ?? null;
-      const aExperience = aStats?.experience ?? a.experience ?? null;
-      const bExperience = bStats?.experience ?? b.experience ?? null;
+      const aRole =
+        positionHolderIds.get(a.id) ??
+        aOfficialPositions[0]?.label ??
+        futureRolesByFigureId[a.id]?.[0]?.label ??
+        "Member";
+      const bRole =
+        positionHolderIds.get(b.id) ??
+        bOfficialPositions[0]?.label ??
+        futureRolesByFigureId[b.id]?.[0]?.label ??
+        "Member";
+
+      const aCharismaBandIndex = charismaBandIndexFromLabel(aStats?.charisma_band ?? a.charisma_band);
+      const bCharismaBandIndex = charismaBandIndexFromLabel(bStats?.charisma_band ?? b.charisma_band);
+      const aCharisma = aCharismaBandIndex ?? aStats?.charisma ?? a.charisma ?? null;
+      const bCharisma = bCharismaBandIndex ?? bStats?.charisma ?? b.charisma ?? null;
+
+      const aExperienceTierIndex = experienceTierIndexFromLabel(aStats?.experience_band ?? a.experience_band);
+      const bExperienceTierIndex = experienceTierIndexFromLabel(bStats?.experience_band ?? b.experience_band);
+      const aExperience = aExperienceTierIndex ?? aStats?.experience ?? a.experience ?? null;
+      const bExperience = bExperienceTierIndex ?? bStats?.experience ?? b.experience ?? null;
 
       const aJoinSort = joinDateSortValue(a.created_at_game_month);
       const bJoinSort = joinDateSortValue(b.created_at_game_month);
@@ -633,7 +934,14 @@ function MembersPage() {
     });
 
     return rows;
-  }, [baseFigures, figureStatsById, futureRolesByFigureId, memberSort, positionHolderIds]);
+  }, [
+    baseFigures,
+    figureStatsById,
+    futureRolesByFigureId,
+    memberSort,
+    positionHolderIds,
+    selectedNationName,
+  ]);
 
   const figuresById = useMemo(() => {
     const m = new Map<number, Figure>();
@@ -663,6 +971,25 @@ function MembersPage() {
     },
     [memberSort],
   );
+
+  const openRoleHistoryModal = useCallback(
+    (figureId: number, name: string, stats: FigureStats | undefined) => {
+      setRoleHistoryFigureId(figureId);
+      setRoleHistoryName(name);
+      setRoleHistoryEntries(buildRoleHistoryEntries(stats, selectedNationName));
+    },
+    [selectedNationName],
+  );
+
+  const closeRoleHistoryModal = useCallback(() => {
+    setIsClosingRoleHistoryModal(true);
+    setTimeout(() => {
+      setRoleHistoryFigureId(null);
+      setRoleHistoryName(null);
+      setRoleHistoryEntries([]);
+      setIsClosingRoleHistoryModal(false);
+    }, 200);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -835,32 +1162,39 @@ function MembersPage() {
                           const role = positionHolderIds.get(f.id);
                           const futureRoles = futureRolesByFigureId[f.id] ?? [];
                           const stats = figureStatsById[f.id];
+                          const officialPositions = currentOfficialPositions(stats, selectedNationName);
+                          const hasOfficialPositions = officialPositions.length > 0;
                           const imageUrl = safeHttpUrl(stats?.image_url ?? f.image_url);
                           const wikiHref = safeHttpUrl(stats?.wiki_url ?? f.wiki_url);
-                          const charisma = stats?.charisma ?? f.charisma;
-                          const experience = stats?.experience ?? f.experience;
-                          const charismaBand =
-                            typeof charisma === "number" ? charismaBandIndex(charisma) : null;
-                          const charismaLabel =
-                            typeof charisma === "number" ? charismaBandLabel(charisma) : null;
-                          const experienceTier =
-                            typeof experience === "number" ? experienceTierIndex(experience) : null;
-                          const experienceLabel =
-                            typeof experience === "number" ? experienceTierLabel(experience) : null;
+                          
+                          const charismaBandStr = stats?.charisma_band ?? f.charisma_band;
+                          const charismaNum = stats?.charisma ?? f.charisma;
+                          const charismaBandIndex_val = charismaBandIndexFromLabel(charismaBandStr);
+                          const charismaBand = charismaBandIndex_val !== null ? charismaBandIndex_val : (typeof charismaNum === "number" ? charismaBandIndex(charismaNum) : null);
+                          const charismaLabel = charismaBandStr ?? (typeof charismaNum === "number" ? charismaBandLabel(charismaNum) : null);
+                          
+                          const experienceBandStr = stats?.experience_band ?? f.experience_band;
+                          const experienceNum = stats?.experience ?? f.experience;
+                          const experienceTierIndex_val = experienceTierIndexFromLabel(experienceBandStr);
+                          const experienceTier = experienceTierIndex_val !== null ? experienceTierIndex_val : (typeof experienceNum === "number" ? experienceTierIndex(experienceNum) : null);
+                          const experienceLabel = experienceBandStr ?? (typeof experienceNum === "number" ? experienceTierLabel(experienceNum) : null);
                           return (
                             <tr
                               key={f.id}
-                              className={`border-t border-border ${wikiHref ? "cursor-pointer hover:bg-muted/30" : "cursor-default"}`}
-                              onClick={
-                                wikiHref
-                                  ? () => {
-                                      window.open(wikiHref, "_blank", "noopener,noreferrer");
-                                    }
-                                  : undefined
-                              }
+                              className="border-t border-border"
                             >
                               <td className="px-3 py-2 font-medium">
-                                <div className="flex items-center gap-2">
+                                <div
+                                  className="flex items-center gap-2"
+                                  onClick={
+                                    wikiHref
+                                      ? () => {
+                                          window.open(wikiHref, "_blank", "noopener,noreferrer");
+                                        }
+                                      : undefined
+                                  }
+                                  style={{ cursor: wikiHref ? "pointer" : "default" }}
+                                >
                                   <div
                                     className={`h-7 w-7 shrink-0 overflow-hidden rounded-full ${imageUrl ? "bg-muted" : "bg-transparent"}`}
                                   >
@@ -870,15 +1204,17 @@ function MembersPage() {
                                       <div className="h-full w-full rounded-full border border-border/40 bg-muted/20" />
                                     )}
                                   </div>
-                                  <span>{name}</span>
+                                  <span className={wikiHref ? "hover:underline" : ""}>{name}</span>
                                 </div>
                               </td>
                               <td className="px-3 py-2">
-                                {role || futureRoles.length > 0 ? (
+                                {role || hasOfficialPositions || futureRoles.length > 0 ? (
                                   <div className="flex flex-wrap items-center gap-1.5">
                                     {role && (
-                                      <span
-                                        className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium"
+                                      <button
+                                        type="button"
+                                        onClick={() => openRoleHistoryModal(f.id, name, stats)}
+                                        className="inline-flex cursor-pointer items-center rounded-full border px-2 py-0.5 text-xs font-medium"
                                         style={{
                                           background: selectedParty?.color ?? "#6b7280",
                                           color: textForColor(selectedParty?.color ?? "#6b7280"),
@@ -887,18 +1223,36 @@ function MembersPage() {
                                               ? roleBorderForColor(selectedParty.color)
                                               : "#374151",
                                         }}
+                                        title="Click for full role history"
                                       >
                                         {role}
-                                      </span>
+                                      </button>
                                     )}
-                                    {futureRoles.map((futureRole) => (
-                                      <span
+                                    {officialPositions.map((officialPosition, index) => (
+                                      <button
+                                        type="button"
+                                        onClick={() => openRoleHistoryModal(f.id, name, stats)}
+                                        key={`${f.id}-official-${officialPosition.source}-${officialPosition.label}-${index}`}
+                                        className="inline-flex cursor-pointer items-center rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
+                                        title={
+                                          officialPosition.source === "hos"
+                                            ? "Current head-of-state term (click for history)"
+                                            : "Current cabinet position (click for history)"
+                                        }
+                                      >
+                                        {officialPosition.label}
+                                      </button>
+                                    ))}
+                                    {!hasOfficialPositions && futureRoles.map((futureRole) => (
+                                      <button
+                                        type="button"
+                                        onClick={() => openRoleHistoryModal(f.id, name, stats)}
                                         key={`${f.id}-${futureRole.label}-${futureRole.hover}`}
-                                        className="inline-flex items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                                        title={futureRole.hover}
+                                        className="inline-flex cursor-pointer items-center rounded-full border border-border bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                        title={`${futureRole.hover} (click for history)`}
                                       >
                                         {futureRole.label}
-                                      </span>
+                                      </button>
                                     ))}
                                   </div>
                                 ) : (
@@ -928,8 +1282,15 @@ function MembersPage() {
                                   <span className="text-muted-foreground">—</span>
                                 ) : (
                                   <div
-                                    className="flex items-center gap-2"
-                                    title={`${experience} · ${experienceLabel}`}
+                                    className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                                    title={`${experienceLabel} (click for breakdown)`}
+                                    onClick={() => {
+                                      setExperienceBreakdownFigureId(f.id);
+                                      const breakdown = figureStatsById[f.id]?.experience_breakdown ?? f.experience_breakdown;
+                                      setExperienceBreakdownData(breakdown ?? null);
+                                      setExperienceBreakdownName(name);
+                                      setExperienceBreakdownBand(experienceLabel);
+                                    }}
                                   >
                                     <div className="h-2.5 w-32 overflow-hidden rounded-full border border-border/60 bg-muted/50">
                                       <div className="flex h-full w-full">
@@ -956,6 +1317,214 @@ function MembersPage() {
                   <p className="px-1 text-xs text-muted-foreground">
                     Click any column header to sort this table.
                   </p>
+                  
+                  {experienceBreakdownFigureId !== null && experienceBreakdownData && (
+                    <div 
+                      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-200 ${
+                        isClosingModal ? "opacity-0" : "opacity-100"
+                      }`}
+                      onClick={() => {
+                        setIsClosingModal(true);
+                        setTimeout(() => {
+                          setExperienceBreakdownFigureId(null);
+                          setIsClosingModal(false);
+                        }, 200);
+                      }}
+                    >
+                      <style>{`
+                        @keyframes slideInScale {
+                          from {
+                            opacity: 0;
+                            transform: scale(0.95);
+                          }
+                          to {
+                            opacity: 1;
+                            transform: scale(1);
+                          }
+                        }
+                        @keyframes slideOutScale {
+                          from {
+                            opacity: 1;
+                            transform: scale(1);
+                          }
+                          to {
+                            opacity: 0;
+                            transform: scale(0.95);
+                          }
+                        }
+                        .modal-open {
+                          animation: slideInScale 0.2s ease-out;
+                        }
+                        .modal-close {
+                          animation: slideOutScale 0.2s ease-in;
+                        }
+                      `}</style>
+                      <div
+                        className={`bg-card border border-border rounded-lg p-6 max-w-sm w-full mx-4 shadow-lg ${
+                          isClosingModal ? "modal-close" : "modal-open"
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-lg font-semibold text-foreground">Experience Breakdown</h3>
+                          <button
+                            className="text-muted-foreground hover:text-foreground transition-colors ml-2 flex-shrink-0"
+                            onClick={() => {
+                              setIsClosingModal(true);
+                              setTimeout(() => {
+                                setExperienceBreakdownFigureId(null);
+                                setIsClosingModal(false);
+                              }, 200);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            {experienceBreakdownName && (
+                              <p className="text-sm text-muted-foreground">{experienceBreakdownName}</p>
+                            )}
+                          </div>
+                          {experienceBreakdownBand && (
+                            <span className="inline-block px-2 py-1 text-xs font-medium rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-400">
+                              {experienceBreakdownBand}
+                            </span>
+                          )}
+                        </div>
+                        <div className="space-y-3">
+                          {Object.entries(experienceBreakdownData)
+                            .sort((a, b) => b[1] - a[1])
+                            .map(([key, value]) => (
+                              <div key={key} className="flex items-center justify-between text-sm" title={getExperienceBreakdownTooltip(key)}>
+                                <span className="text-muted-foreground font-medium cursor-help">{formatExperienceLabel(key)}</span>
+                                <div className="flex items-center gap-2">
+                                  <div className="h-2 bg-muted rounded flex-1 w-24">
+                                    <div
+                                      className={`h-full ${experienceBandColorClass(experienceBreakdownBand)} rounded transition-all duration-300`}
+                                      style={{
+                                        width: `${(value / Math.max(...Object.values(experienceBreakdownData))) * 100}%`,
+                                      }}
+                                    />
+                                  </div>
+                                  <span className="font-medium w-12 text-right text-foreground">{value}</span>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {roleHistoryFigureId !== null && (
+                    <div
+                      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-200 ${
+                        isClosingRoleHistoryModal ? "opacity-0" : "opacity-100"
+                      }`}
+                      onClick={closeRoleHistoryModal}
+                    >
+                      <style>{`
+                        @keyframes slideInScale {
+                          from {
+                            opacity: 0;
+                            transform: scale(0.95);
+                          }
+                          to {
+                            opacity: 1;
+                            transform: scale(1);
+                          }
+                        }
+                        @keyframes slideOutScale {
+                          from {
+                            opacity: 1;
+                            transform: scale(1);
+                          }
+                          to {
+                            opacity: 0;
+                            transform: scale(0.95);
+                          }
+                        }
+                        .modal-open {
+                          animation: slideInScale 0.2s ease-out;
+                        }
+                        .modal-close {
+                          animation: slideOutScale 0.2s ease-in;
+                        }
+                      `}</style>
+                      <div
+                        className={`bg-card border border-border rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto mx-4 shadow-lg ${
+                          isClosingRoleHistoryModal ? "modal-close" : "modal-open"
+                        }`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-lg font-semibold text-foreground">Role History</h3>
+                          <button
+                            className="text-muted-foreground hover:text-foreground transition-colors ml-2 flex-shrink-0"
+                            onClick={closeRoleHistoryModal}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        {roleHistoryName && (
+                          <p className="mb-4 text-sm text-muted-foreground">{roleHistoryName}</p>
+                        )}
+
+                        {roleHistoryEntries.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No role history available yet.</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {roleHistoryEntries.map((entry, index) => {
+                              const startText =
+                                entry.startMonth == null ? null : formatJoinDate(entry.startMonth);
+                              const endText = entry.isCurrent
+                                ? "Present"
+                                : entry.endMonth == null
+                                  ? null
+                                  : formatJoinDate(entry.endMonth);
+                              const dateText =
+                                startText || endText
+                                  ? `${startText ?? "Unknown"} - ${endText ?? "Unknown"}`
+                                  : "Dates unavailable";
+                              const categoryIconUrl =
+                                entry.category === "Party Position"
+                                  ? partyLogoFallbackUrl
+                                  : selectedNationFlagUrl;
+
+                              return (
+                                <div
+                                  key={`${entry.category}-${entry.title}-${index}`}
+                                  className="rounded-md border border-border/60 bg-muted/20 p-3"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                                      {categoryIconUrl && (
+                                        <img
+                                          src={categoryIconUrl}
+                                          alt=""
+                                          className="mr-1 h-3.5 w-auto max-w-6 rounded-sm object-contain"
+                                        />
+                                      )}
+                                      {entry.category === "Party Position"
+                                        ? selectedParty?.abbreviation || "PP"
+                                        : entry.category}
+                                    </span>
+                                    {entry.isCurrent && (
+                                      <span className="inline-flex items-center rounded-full border border-sky-500 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-800 dark:border-sky-400 dark:bg-sky-950/40 dark:text-sky-200">
+                                        Current
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-2 text-sm font-medium text-foreground">{entry.title}</div>
+                                  <div className="mt-1 text-xs text-muted-foreground">{dateText}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </section>
