@@ -17,6 +17,13 @@ type Props = {
   seats: ParliamentSeat[];
   totalSeats: number;
   hiddenPartyIds?: number[];
+  // Logic settings (projection)
+  estTotalSeats?: number;
+  estThreshold?: number;
+  defaultTotalSeats?: number;
+  defaultThreshold?: number;
+  onTotalSeatsChange?: (v: number) => void;
+  onThresholdChange?: (v: number) => void;
 };
 
 function orderForHemicycle(parties: ParliamentSeat[]): ParliamentSeat[] {
@@ -61,11 +68,24 @@ type Settings = {
 
 type EffectiveSettings = Settings & { drawWidth: number };
 
-export function ParliamentChart({ seats, totalSeats, hiddenPartyIds = [] }: Props) {
+export function ParliamentChart({
+  seats,
+  totalSeats,
+  hiddenPartyIds = [],
+  estTotalSeats,
+  estThreshold,
+  defaultTotalSeats,
+  defaultThreshold,
+  onTotalSeatsChange,
+  onThresholdChange,
+}: Props) {
+  const hasLogicControls = onTotalSeatsChange != null && onThresholdChange != null;
     const hiddenPartySet = useMemo(() => new Set(hiddenPartyIds), [hiddenPartyIds]);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const settingsPanelRef = useRef<HTMLDivElement | null>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const [width, setWidth] = useState(640);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>({
@@ -75,6 +95,19 @@ export function ParliamentChart({ seats, totalSeats, hiddenPartyIds = [] }: Prop
     rowHeight: 21,
     sectionGap: 26,
   });
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+    function handlePointerDown(e: MouseEvent) {
+      if (
+        settingsPanelRef.current?.contains(e.target as Node) ||
+        settingsBtnRef.current?.contains(e.target as Node)
+      ) return;
+      setSettingsOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [settingsOpen]);
 
   const N = useMemo(
     () => seats.filter((s) => s.seats > 0).reduce((s, p) => s + p.seats, 0),
@@ -157,6 +190,7 @@ export function ParliamentChart({ seats, totalSeats, hiddenPartyIds = [] }: Prop
       <div className="relative">
         <div className="absolute right-0 top-0 z-10" data-export-ignore>
           <button
+            ref={settingsBtnRef}
             type="button"
             onClick={() => setSettingsOpen((v) => !v)}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
@@ -169,72 +203,141 @@ export function ParliamentChart({ seats, totalSeats, hiddenPartyIds = [] }: Prop
             </svg>
           </button>
           {settingsOpen && (
-            <div className="mt-1 w-60 rounded-md border border-border bg-background shadow-lg p-3 space-y-2 text-xs">
+            <div ref={settingsPanelRef} className="absolute right-0 top-8 w-72 rounded-lg border border-border bg-background shadow-xl p-4 space-y-4 text-xs z-20">
+              {/* Header */}
               <div className="flex items-center justify-between">
-                <span className="font-semibold">Chart settings</span>
-                <label className="inline-flex items-center gap-1.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    className="h-3.5 w-3.5 accent-foreground cursor-pointer"
-                    checked={settings.auto}
-                    onChange={(e) => setSettings((s) => ({ ...s, auto: e.target.checked }))}
-                  />
-                  Auto-fit
-                </label>
+                <span className="text-sm font-semibold text-foreground">Settings</span>
+                <button
+                  type="button"
+                  onClick={() => setSettingsOpen(false)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label="Close settings"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
               </div>
-              <Field label="Sections">
-                <input
-                  type="number"
-                  min={1}
-                  max={10}
-                  step={1}
-                  disabled={settings.auto}
+
+              {/* Section 1: Projection logic */}
+              {hasLogicControls && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Projection</span>
+                    <div className="flex-1 h-px bg-border" />
+                    {(estTotalSeats !== defaultTotalSeats || estThreshold !== defaultThreshold) && (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={() => { onTotalSeatsChange!(defaultTotalSeats!); onThresholdChange!(defaultThreshold!); }}
+                      >
+                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
+                        </svg>
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Total seats</span>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={estTotalSeats}
+                        onChange={(e) => onTotalSeatsChange!(Math.max(1, Math.floor(Number(e.target.value) || 1)))}
+                        className="h-7 w-20 rounded-md border border-input bg-background px-2 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Threshold</span>
+                      <div className="relative inline-flex items-center">
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.1}
+                          value={estThreshold}
+                          onChange={(e) => onThresholdChange!(Math.max(0, Number(e.target.value) || 0))}
+                          className="h-7 w-20 rounded-md border border-input bg-background pl-2 pr-5 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
+                        />
+                        <span className="pointer-events-none absolute right-2 text-[10px] text-muted-foreground">%</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Divider between sections */}
+              {hasLogicControls && <div className="h-px bg-border" />}
+
+              {/* Section 2: Appearance */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Appearance</span>
+                  <div className="flex-1 h-px bg-border" />
+                </div>
+
+                {/* Auto-fit toggle */}
+                <label className="flex items-center justify-between gap-3 rounded-md border border-border bg-secondary/40 px-3 py-2 cursor-pointer select-none">
+                  <div>
+                    <div className="font-medium text-foreground">Auto-fit</div>
+                    <div className="text-muted-foreground text-[10px] mt-0.5">Compute geometry from seat count</div>
+                  </div>
+                  <div
+                    className={`relative inline-flex h-5 w-9 shrink-0 rounded-full border-2 border-transparent transition-colors ${settings.auto ? "bg-foreground" : "bg-input"}`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 rounded-full bg-background shadow-sm transition-transform ${settings.auto ? "translate-x-4" : "translate-x-0"}`}
+                    />
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={settings.auto}
+                      onChange={(e) => setSettings((s) => ({ ...s, auto: e.target.checked }))}
+                    />
+                  </div>
+                </label>
+
+                <SliderField
+                  label="Sections"
                   value={effectiveSettings.sections}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, sections: Math.max(1, Number(e.target.value) || 1) }))
-                  }
-                  className="h-7 w-16 rounded border border-input bg-background px-1.5 text-right tabular-nums disabled:opacity-50"
-                />
-              </Field>
-              <Field label="Seat radius">
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
+                  min={1} max={11} step={2}
                   disabled={settings.auto}
+                  onChange={(v) => setSettings((s) => ({ ...s, sections: v }))}
+                />
+                <SliderField
+                  label="Seat radius"
                   value={effectiveSettings.seatRadius}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, seatRadius: Math.max(1, Math.round(Number(e.target.value) || 1)) }))
-                  }
-                  className="h-7 w-16 rounded border border-input bg-background px-1.5 text-right tabular-nums disabled:opacity-50"
-                />
-              </Field>
-              <Field label="Row height">
-                <input
-                  type="number"
-                  min={1}
-                  step={1}
+                  min={2} max={18} step={1}
                   disabled={settings.auto}
+                  onChange={(v) => setSettings((s) => ({ ...s, seatRadius: v }))}
+                />
+                <SliderField
+                  label="Row height"
                   value={effectiveSettings.rowHeight}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, rowHeight: Math.max(1, Math.round(Number(e.target.value) || 1)) }))
-                  }
-                  className="h-7 w-16 rounded border border-input bg-background px-1.5 text-right tabular-nums disabled:opacity-50"
-                />
-              </Field>
-              <Field label="Section gap">
-                <input
-                  type="number"
-                  min={0}
-                  step={1}
+                  min={4} max={40} step={1}
                   disabled={settings.auto}
-                  value={effectiveSettings.sectionGap}
-                  onChange={(e) =>
-                    setSettings((s) => ({ ...s, sectionGap: Math.max(0, Number(e.target.value) || 0) }))
-                  }
-                  className="h-7 w-16 rounded border border-input bg-background px-1.5 text-right tabular-nums disabled:opacity-50"
+                  onChange={(v) => setSettings((s) => ({ ...s, rowHeight: v }))}
                 />
-              </Field>
+                <SliderField
+                  label="Section gap"
+                  value={effectiveSettings.sectionGap}
+                  min={0} max={60} step={1}
+                  disabled={settings.auto}
+                  onChange={(v) => setSettings((s) => ({ ...s, sectionGap: v }))}
+                />
+
+                {!settings.auto && (
+                  <button
+                    type="button"
+                    onClick={() => setSettings((s) => ({ ...s, auto: true }))}
+                    className="w-full rounded-md border border-border bg-secondary/50 px-3 py-1.5 text-center text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+                  >
+                    Reset to auto-fit
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -261,11 +364,39 @@ export function ParliamentChart({ seats, totalSeats, hiddenPartyIds = [] }: Prop
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function SliderField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  disabled: boolean;
+  onChange: (v: number) => void;
+}) {
   return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-muted-foreground">{label}</span>
-      {children}
+    <div className={`space-y-1 ${disabled ? "opacity-40 pointer-events-none" : ""}`}>
+      <div className="flex items-center justify-between">
+        <span className="text-muted-foreground">{label}</span>
+        <span className="tabular-nums font-medium text-foreground w-7 text-right">{value}</span>
+      </div>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full h-1.5 accent-foreground cursor-pointer rounded-full"
+      />
     </div>
   );
 }
