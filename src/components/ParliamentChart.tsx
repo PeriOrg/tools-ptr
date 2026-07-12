@@ -256,7 +256,7 @@ export function ParliamentChart({
                         <input
                           type="number"
                           min={0}
-                          step={0.1}
+                          step={1}
                           value={estThreshold}
                           onChange={(e) => onThresholdChange!(Math.max(0, Number(e.target.value) || 0))}
                           className="h-7 w-20 rounded-md border border-input bg-background pl-2 pr-5 text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-ring"
