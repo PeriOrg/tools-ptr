@@ -1,5 +1,11 @@
+import { getCachedValue, setCachedValue } from "./ttl-cache";
+
 export type Nation = { id: number; name: string };
 export type NationWithFlag = Nation & { flagUrl: string | null };
+
+const NATION_FLAGS_CACHE_KEY = "ptr.cache.nation-flags.v1";
+const NATION_FLAGS_TTL_MS = 48 * 60 * 60 * 1000;
+type NationFlagCacheMap = Record<number, string | null>;
 
 export async function fetchNationFlag(id: number): Promise<string | null> {
   try {
@@ -25,10 +31,28 @@ export async function fetchNationsWithFlags(): Promise<NationWithFlag[]> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
   const list: Nation[] = await res.json();
+
+  const cachedFlags = getCachedValue<NationFlagCacheMap>(NATION_FLAGS_CACHE_KEY) ?? {};
+  const nextFlags: NationFlagCacheMap = { ...cachedFlags };
+
+  const missingNationIds = list
+    .map((nation) => nation.id)
+    .filter((id) => !(id in cachedFlags));
+
+  if (missingNationIds.length > 0) {
+    const fetchedEntries = await Promise.all(
+      missingNationIds.map(async (nationId) => [nationId, await fetchNationFlag(nationId)] as const),
+    );
+    for (const [nationId, flagUrl] of fetchedEntries) {
+      nextFlags[nationId] = flagUrl;
+    }
+    setCachedValue(NATION_FLAGS_CACHE_KEY, nextFlags, NATION_FLAGS_TTL_MS);
+  }
+
   const enriched = await Promise.all(
     list.map(async (nation) => ({
       ...nation,
-      flagUrl: await fetchNationFlag(nation.id),
+      flagUrl: nextFlags[nation.id] ?? null,
     })),
   );
 

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/EmptyState";
 import { PartySquareLogo } from "@/components/PartySquareLogo";
+import { getPartyMetadata } from "@/lib/party-metadata-cache";
 import { useNation } from "@/lib/nation-context";
 
 export const Route = createFileRoute("/nation")({
@@ -348,8 +349,8 @@ function NationPage() {
         const partyEntries = await Promise.all(
           Array.from(partyIds).map(async (partyId) => {
             try {
-              const partyRes = await fetch(`/api/ptr/parties/${partyId}`);
-              if (!partyRes.ok) {
+              const metadata = await getPartyMetadata(partyId);
+              if (!metadata) {
                 return [
                   partyId,
                   {
@@ -360,14 +361,10 @@ function NationPage() {
                   },
                 ] as const;
               }
-              const party = await partyRes.json();
-              const logoUrl = safeHttpUrl(party?.logo_url);
-              const partyAbbreviation =
-                typeof party?.abbreviation === "string" && party.abbreviation.trim()
-                  ? party.abbreviation.trim()
-                  : null;
-              const partyName = typeof party?.name === "string" && party.name.trim() ? party.name.trim() : null;
-              const partyColor = safeColor(party?.color);
+              const logoUrl = safeHttpUrl(metadata.logoUrl);
+              const partyAbbreviation = metadata.abbreviation;
+              const partyName = metadata.name;
+              const partyColor = safeColor(metadata.color);
               return [
                 partyId,
                 {

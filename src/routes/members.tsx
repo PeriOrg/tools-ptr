@@ -1,6 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/EmptyState";
+import { getPartyMetadata } from "@/lib/party-metadata-cache";
 import { fetchNationFlag } from "../lib/nations";
 import { usePtrAuth } from "../lib/ptr-auth";
 
@@ -686,18 +687,17 @@ function MembersPage() {
           normalized.map(async (p) => {
             if (p.abbreviation && p.color) return p;
             try {
-              const d = await fetch(`/api/ptr/parties/${p.id}`);
-              if (!d.ok) return p;
-              const j = await d.json();
+              const metadata = await getPartyMetadata(p.id);
+              if (!metadata) return p;
               return {
                 ...p,
-                name: p.name || j.name,
-                abbreviation: p.abbreviation || j.abbreviation || "",
-                color: p.color || j.color || null,
-                logo_url: p.logo_url || j.logo_url || null,
-                seat_count: p.seat_count ?? j.seat_count,
-                nation_id: p.nation_id ?? j.nation_id,
-                nation_name: p.nation_name ?? j.nation_name ?? j.nation?.name,
+                name: p.name || metadata.name || "",
+                abbreviation: p.abbreviation || metadata.abbreviation || "",
+                color: p.color || metadata.color || null,
+                logo_url: p.logo_url || metadata.logoUrl || null,
+                seat_count: p.seat_count ?? metadata.seatCount ?? undefined,
+                nation_id: p.nation_id ?? metadata.nationId ?? undefined,
+                nation_name: p.nation_name ?? metadata.nationName ?? undefined,
               } as MyParty;
             } catch {
               return p;
