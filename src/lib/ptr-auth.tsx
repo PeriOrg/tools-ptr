@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { removeCachedValuesByPrefix } from "./ttl-cache";
 
 const SUPABASE_URL =
   (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.replace(/\/+$/, "") ||
@@ -18,6 +19,7 @@ const DISCORD_LOGIN_ENABLED = ["true", "1", "yes"].includes(
   ((import.meta.env.VITE_DISCORD_LOGIN_ENABLED as string | undefined) ?? "").trim().toLowerCase(),
 );
 const STORAGE_KEY = "ptr.auth.v1";
+const APP_CACHE_PREFIX = "ptr.cache.";
 
 type StoredSession = {
   access_token: string;
@@ -200,7 +202,10 @@ export function PtrAuthProvider({ children }: { children: ReactNode }) {
     [update],
   );
 
-  const logout = useCallback(() => update(null), [update]);
+  const logout = useCallback(() => {
+    removeCachedValuesByPrefix(APP_CACHE_PREFIX);
+    update(null);
+  }, [update]);
 
   const loginWithDiscord = useCallback(() => {
     if (!DISCORD_LOGIN_ENABLED) return;
