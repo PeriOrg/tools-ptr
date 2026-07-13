@@ -97,10 +97,19 @@ type PositionHeld = {
   is_current?: boolean;
 };
 
+type MinistryPositionHeld = {
+  title?: string | null;
+  ministry_name?: string | null;
+  term_start_game_month?: number | string | null;
+  term_end_game_month?: number | string | null;
+  is_current?: boolean;
+};
+
 type FigureDetail = Figure & {
   hos_terms?: HosTerm[];
   cabinet_positions?: CabinetPosition[];
   positions_held?: PositionHeld[];
+  ministry_positions_held?: MinistryPositionHeld[];
 };
 
 type FigureStats = {
@@ -114,6 +123,7 @@ type FigureStats = {
   hos_terms?: HosTerm[];
   cabinet_positions?: CabinetPosition[];
   positions_held?: PositionHeld[];
+  ministry_positions_held?: MinistryPositionHeld[];
 };
 
 type MinisterAssignment = {
@@ -129,12 +139,13 @@ type FutureRolePill = {
 };
 
 type OfficialPositionPill = {
-  source: "hos" | "cabinet";
+  source: "hos" | "cabinet" | "ministry";
   label: string;
 };
 
 type RoleHistoryEntry = {
-  category: "Head of State" | "Cabinet" | "Party Position";
+  category: "Head of State" | "Cabinet" | "Ministry Position" | "Party Position";
+  badgeLabel?: string;
   title: string;
   startMonth: number | string | null;
   endMonth: number | string | null;
@@ -464,7 +475,24 @@ function currentOfficialPositions(
     .filter((label) => label.length > 0)
     .map((label) => ({ source: "cabinet" as const, label }));
 
-  return [...hos, ...cabinet];
+  const ministry = (stats.ministry_positions_held ?? [])
+    .filter((position) => position?.is_current === true)
+    .map((position) => (position?.title ?? "").trim())
+    .filter((label) => label.length > 0)
+    .map((label) => ({ source: "ministry" as const, label }));
+
+  return [...hos, ...cabinet, ...ministry];
+}
+
+function hasCurrentDualAssignment(stats: FigureStats | undefined): boolean {
+  if (!stats) return false;
+
+  const hasCurrentCabinetPosition = (stats.cabinet_positions ?? []).some(
+    (position) => position?.is_current === true || position?.label?.is_current === true,
+  );
+  if (!hasCurrentCabinetPosition) return false;
+
+  return (stats.ministry_positions_held ?? []).some((position) => position?.is_current === true);
 }
 
 function buildRoleHistoryEntries(
@@ -509,6 +537,19 @@ function buildRoleHistoryEntries(
         position?.end_game_month ??
         null,
       isCurrent,
+    });
+  });
+
+  (stats.ministry_positions_held ?? []).forEach((position) => {
+    const title = (position?.title ?? "").trim();
+    if (!title) return;
+    entries.push({
+      category: "Ministry Position",
+      badgeLabel: (position?.ministry_name ?? "").trim() || "Ministry Position",
+      title,
+      startMonth: position?.term_start_game_month ?? null,
+      endMonth: position?.term_end_game_month ?? null,
+      isCurrent: position?.is_current === true,
     });
   });
 
@@ -811,6 +852,8 @@ function MembersPage() {
                       wiki_url: detail.wiki_url ?? existing.wiki_url,
                       hos_terms: detail.hos_terms ?? existing.hos_terms,
                       cabinet_positions: detail.cabinet_positions ?? existing.cabinet_positions,
+                      ministry_positions_held:
+                        detail.ministry_positions_held ?? existing.ministry_positions_held,
                       positions_held: detail.positions_held ?? existing.positions_held,
                     },
                   };
@@ -1163,6 +1206,7 @@ function MembersPage() {
                           const futureRoles = futureRolesByFigureId[f.id] ?? [];
                           const stats = figureStatsById[f.id];
                           const officialPositions = currentOfficialPositions(stats, selectedNationName);
+                          const hasDualAssignmentWarning = hasCurrentDualAssignment(stats);
                           const hasOfficialPositions = officialPositions.length > 0;
                           const imageUrl = safeHttpUrl(stats?.image_url ?? f.image_url);
                           const wikiHref = safeHttpUrl(stats?.wiki_url ?? f.wiki_url);
@@ -1233,16 +1277,30 @@ function MembersPage() {
                                         type="button"
                                         onClick={() => openRoleHistoryModal(f.id, name, stats)}
                                         key={`${f.id}-official-${officialPosition.source}-${officialPosition.label}-${index}`}
-                                        className="inline-flex cursor-pointer items-center rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
+                                        className={
+                                          officialPosition.source === "ministry"
+                                            ? "inline-flex cursor-pointer items-center rounded-full border border-cyan-300 bg-cyan-100 px-2 py-0.5 text-xs font-medium text-cyan-900 dark:border-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-200"
+                                            : "inline-flex cursor-pointer items-center rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-900 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200"
+                                        }
                                         title={
                                           officialPosition.source === "hos"
                                             ? "Current head-of-state term (click for history)"
-                                            : "Current cabinet position (click for history)"
+                                            : officialPosition.source === "cabinet"
+                                              ? "Current cabinet position (click for history)"
+                                              : "Current ministry position (click for history)"
                                         }
                                       >
                                         {officialPosition.label}
                                       </button>
                                     ))}
+                                    {hasDualAssignmentWarning && (
+                                      <span
+                                        className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+                                        title="This member currently holds both a minister role and a ministry subposition."
+                                      >
+                                        Dual assignment
+                                      </span>
+                                    )}
                                     {!hasOfficialPositions && futureRoles.map((futureRole) => (
                                       <button
                                         type="button"
@@ -1507,7 +1565,7 @@ function MembersPage() {
                                       )}
                                       {entry.category === "Party Position"
                                         ? selectedParty?.abbreviation || "PP"
-                                        : entry.category}
+                                        : entry.badgeLabel ?? entry.category}
                                     </span>
                                     {entry.isCurrent && (
                                       <span className="inline-flex items-center rounded-full border border-sky-500 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-800 dark:border-sky-400 dark:bg-sky-950/40 dark:text-sky-200">
