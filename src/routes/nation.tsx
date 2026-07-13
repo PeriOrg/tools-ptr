@@ -516,16 +516,6 @@ function NationPage() {
     return groups;
   }, [government?.members, ministryPositions, figurePartyById]);
 
-  const ministerRows = useMemo(() => {
-    const all = governmentCards.others;
-    if (all.length === 0) return { top: [] as GovernmentCard[], bottom: [] as GovernmentCard[] };
-    const topCount = Math.ceil(all.length / 2);
-    return {
-      top: all.slice(0, topCount),
-      bottom: all.slice(topCount),
-    };
-  }, [governmentCards.others]);
-
   return (
     <main className="mx-auto max-w-[88rem] px-4 py-6 space-y-6 sm:px-6 sm:py-8">
       <header className="space-y-1">
@@ -623,35 +613,21 @@ function NationPage() {
                 {governmentCards.others.length > 0 ? (
                   <div className="mt-10 space-y-2">
                     <h3 className="mb-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ministers</h3>
-                    <div className="space-y-3">
-                      <div className="mx-auto flex w-full max-w-7xl justify-between gap-3">
-                        {ministerRows.top.map((member) => (
-                          <div key={`ministers-top-${member.key}`} className="w-[11rem]">
-                            <GovernmentHolderCard
-                              card={member}
-                              figureImageById={figureImageById}
-                              figurePartyById={figurePartyById}
-                              partyMetaById={partyMetaById}
-                              size="compact"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      {ministerRows.bottom.length > 0 ? (
-                        <div className="mx-auto flex w-full max-w-7xl justify-between gap-3">
-                          {ministerRows.bottom.map((member) => (
-                            <div key={`ministers-bottom-${member.key}`} className="w-[11rem]">
-                              <GovernmentHolderCard
-                                card={member}
-                                figureImageById={figureImageById}
-                                figurePartyById={figurePartyById}
-                                partyMetaById={partyMetaById}
-                                size="compact"
-                              />
-                            </div>
-                          ))}
+                    <div className="mx-auto flex w-full max-w-7xl flex-wrap justify-center gap-3">
+                      {governmentCards.others.map((member) => (
+                        <div
+                          key={`ministers-${member.key}`}
+                          className="min-w-0 basis-[8.5rem] sm:basis-[10rem] lg:basis-[11rem]"
+                        >
+                          <GovernmentHolderCard
+                            card={member}
+                            figureImageById={figureImageById}
+                            figurePartyById={figurePartyById}
+                            partyMetaById={partyMetaById}
+                            size="compact"
+                          />
                         </div>
-                      ) : null}
+                      ))}
                     </div>
                   </div>
                 ) : null}
