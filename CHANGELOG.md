@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Nation page: now also lists members who have resigned and no longer form part of the government.
 - In-app version tracker: current app version shown in the home footer, clickable to open the full changelog history.
 
+### Fixed
+
+- Modal for the role history was not showing for party members not holding any position. Now the user can click on the "Members" text to see the detailed history of that character.
+
 ## [0.1.0] - 2026-07-16
 
 ### Added
