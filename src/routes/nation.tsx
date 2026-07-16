@@ -53,6 +53,7 @@ type GovernmentMember = {
   is_head_of_government?: boolean;
   is_deputy_hog?: boolean;
   deputy_until_game_month?: string | null;
+  resigned_at?: string | null;
 };
 
 type GovernmentData = {
@@ -70,6 +71,7 @@ type GovernmentCard = {
   partyAbbreviation: string | null;
   partyName: string | null;
   partyColor: string | null;
+  resignedAt?: string | null;
 };
 
 type MinistryPositionHolder = {
@@ -410,6 +412,9 @@ function NationPage() {
       (a, b) => (a.display_order ?? Number.MAX_SAFE_INTEGER) - (b.display_order ?? Number.MAX_SAFE_INTEGER),
     );
 
+    const hasResigned = (member: GovernmentMember): boolean =>
+      typeof member.resigned_at === "string" && member.resigned_at.trim().length > 0;
+
     const mapMemberToCard = (member: GovernmentMember, roleOverride?: string): GovernmentCard | null => {
       if (typeof member.person_id !== "number") return null;
       const fullNameFromParts = [member.minister_given_name ?? "", member.minister_surname ?? ""]
@@ -434,13 +439,18 @@ function NationPage() {
         partyName:
           typeof member.party_name === "string" && member.party_name.trim() ? member.party_name.trim() : null,
         partyColor: safeColor(member.party_color),
+        resignedAt: hasResigned(member) ? member.resigned_at!.trim() : null,
       };
     };
 
-    const headMember = members.find((m) => m.is_head_of_government === true);
-    const deputyMember = members.find(
-      (m) => m.is_deputy_hog === true && (m.deputy_until_game_month == null || m.deputy_until_game_month === ""),
-    ) ?? members.find((m) => m.is_deputy_hog === true);
+    const activeMembers = members.filter((m) => !hasResigned(m));
+    const resignedMembers = members.filter((m) => hasResigned(m));
+
+    const headMember = activeMembers.find((m) => m.is_head_of_government === true);
+    const deputyMember =
+      activeMembers.find(
+        (m) => m.is_deputy_hog === true && (m.deputy_until_game_month == null || m.deputy_until_game_month === ""),
+      ) ?? activeMembers.find((m) => m.is_deputy_hog === true);
 
     const head = headMember ? mapMemberToCard(headMember, headMember.ministry_name?.trim() || "Head of Government") : null;
     const deputyRoleTitle = (government?.deputy_title ?? "Deputy Head of Government").trim() || "Deputy Head of Government";
@@ -452,12 +462,18 @@ function NationPage() {
     if (headMember?.id != null) excludedIds.add(headMember.id);
     if (deputyMember?.id != null) excludedIds.add(deputyMember.id);
 
-    const others = members
+    const others = activeMembers
       .filter((member) => !excludedIds.has(member.id))
       .map((member) => mapMemberToCard(member))
       .filter((card): card is GovernmentCard => card != null);
 
-    return { head, deputy, others };
+    const former = resignedMembers
+      .slice()
+      .sort((a, b) => (b.resigned_at ?? "").localeCompare(a.resigned_at ?? ""))
+      .map((member) => mapMemberToCard(member))
+      .filter((card): card is GovernmentCard => card != null);
+
+    return { head, deputy, others, former };
   }, [government]);
 
   const ministryPositionGroups = useMemo(() => {
@@ -629,6 +645,30 @@ function NationPage() {
                   </div>
                 ) : null}
 
+                {governmentCards.former.length > 0 ? (
+                  <div className="mt-10 space-y-2">
+                    <h3 className="mb-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Former Ministers
+                    </h3>
+                    <div className="mx-auto flex w-full max-w-7xl flex-wrap justify-center gap-3">
+                      {governmentCards.former.map((member) => (
+                        <div
+                          key={`former-${member.key}`}
+                          className="min-w-0 basis-[8.5rem] sm:basis-[10rem] lg:basis-[11rem]"
+                        >
+                          <GovernmentHolderCard
+                            card={member}
+                            figureImageById={figureImageById}
+                            figurePartyById={figurePartyById}
+                            partyMetaById={partyMetaById}
+                            size="compact"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
                 {ministryPositionsErr ? (
                   <div className="text-sm text-destructive">{ministryPositionsErr}</div>
                 ) : ministryPositionGroups.length > 0 ? (
@@ -707,6 +747,7 @@ function GovernmentHolderCard({
       partyName={partyDisplay}
       partyColor={card.partyColor ?? figureParty?.partyColor ?? partyMeta?.color ?? null}
       size={size}
+      resignedAt={card.resignedAt ?? null}
     />
   );
 }
@@ -719,6 +760,7 @@ function HolderCard({
   partyName,
   partyColor,
   size = "regular",
+  resignedAt = null,
 }: {
   holderName: string;
   positionTitle: string;
@@ -727,6 +769,7 @@ function HolderCard({
   partyName: string | null;
   partyColor: string | null;
   size?: "regular" | "compact" | "tiny";
+  resignedAt?: string | null;
 }) {
   const [currentImageUrl, setCurrentImageUrl] = useState<string | null>(portraitUrl ?? partyLogoUrl);
 
@@ -745,7 +788,7 @@ function HolderCard({
   return (
     <article className="text-center">
       <div
-        className={`mx-auto overflow-hidden rounded-xl border border-border/70 ${imageSizeClass} ${currentImageUrl ? "bg-muted" : "bg-muted/20"}`}
+        className={`mx-auto overflow-hidden rounded-xl border border-border/70 ${imageSizeClass} ${currentImageUrl ? "bg-muted" : "bg-muted/20"} ${resignedAt ? "opacity-60 grayscale" : ""}`}
         title={positionTitle}
       >
         {currentImageUrl ? (
@@ -772,6 +815,11 @@ function HolderCard({
         >
           {positionTitle}
         </div>
+        {resignedAt ? (
+          <div className={`${roleSizeClass} font-medium leading-tight text-center text-destructive`}>
+            Resigned {resignedAt}
+          </div>
+        ) : null}
         <div className="pt-1" />
         <div className={`flex items-center justify-center gap-1.5 leading-tight text-muted-foreground/70 ${subtitleSizeClass}`}>
           <PartySquareLogo

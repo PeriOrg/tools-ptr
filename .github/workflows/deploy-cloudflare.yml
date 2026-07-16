@@ -28,6 +28,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_DISCORD_REDIRECT_TO: ${{ secrets.VITE_DISCORD_REDIRECT_TO }}
           VITE_DISCORD_LOGIN_ENABLED: ${{ secrets.VITE_DISCORD_LOGIN_ENABLED }}
+          VITE_FRONTEND_URL: ${{ secrets.VITE_FRONTEND_URL }}
         run: npm run build
 
       - name: Fix asset path separator

@@ -5,6 +5,18 @@ import { getPartyMetadata } from "@/lib/party-metadata-cache";
 import { fetchNationFlag } from "../lib/nations";
 import { usePtrAuth } from "../lib/ptr-auth";
 
+const FRONTEND_BASE_URL =
+  (import.meta.env.VITE_FRONTEND_URL as string | undefined)?.replace(/\/+$/, "") ||
+  "https://ptr.zanz2.dev";
+
+function buildPoliticalFigureUrl(
+  nationId: number | null | undefined,
+  figureId: number | null | undefined,
+): string | null {
+  if (nationId == null || figureId == null) return null;
+  return `${FRONTEND_BASE_URL}/nation/${nationId}/political-figure/${figureId}`;
+}
+
 export const Route = createFileRoute("/members")({
   component: MembersPage,
   errorComponent: ({ error, reset }) => {
@@ -57,6 +69,8 @@ type Figure = {
   image_url?: string | null;
   wiki_url?: string | null;
   created_at_game_month?: number | string;
+  born_at_game_month?: number | string | null;
+  age_years?: number | null;
   gender?: string;
   is_active?: boolean;
   party_id?: number;
@@ -121,6 +135,8 @@ type FigureStats = {
   experience_breakdown?: Record<string, number>;
   image_url?: string | null;
   wiki_url?: string | null;
+  born_at_game_month?: number | string | null;
+  age_years?: number | null;
   hos_terms?: HosTerm[];
   cabinet_positions?: CabinetPosition[];
   positions_held?: PositionHeld[];
@@ -850,6 +866,8 @@ function MembersPage() {
                       experience_breakdown: detail.experience_breakdown ?? existing.experience_breakdown,
                       image_url: detail.image_url ?? existing.image_url,
                       wiki_url: detail.wiki_url ?? existing.wiki_url,
+                      born_at_game_month: detail.born_at_game_month ?? existing.born_at_game_month,
+                      age_years: detail.age_years ?? existing.age_years,
                       hos_terms: detail.hos_terms ?? existing.hos_terms,
                       cabinet_positions: detail.cabinet_positions ?? existing.cabinet_positions,
                       ministry_positions_held:
@@ -1188,6 +1206,9 @@ function MembersPage() {
                             </button>
                           </th>
                           <th className="text-right px-3 py-2 font-medium">
+                            Born
+                          </th>
+                          <th className="text-right px-3 py-2 font-medium">
                             <button
                               type="button"
                               className="ml-auto inline-flex items-center gap-1 hover:text-foreground"
@@ -1209,8 +1230,7 @@ function MembersPage() {
                           const hasDualAssignmentWarning = hasCurrentDualAssignment(stats);
                           const hasOfficialPositions = officialPositions.length > 0;
                           const imageUrl = safeHttpUrl(stats?.image_url ?? f.image_url);
-                          const wikiHref = safeHttpUrl(stats?.wiki_url ?? f.wiki_url);
-                          
+                          const figureHref = buildPoliticalFigureUrl(selectedParty?.nation_id, f.id);
                           const charismaBandStr = stats?.charisma_band ?? f.charisma_band;
                           const charismaNum = stats?.charisma ?? f.charisma;
                           const charismaBandIndex_val = charismaBandIndexFromLabel(charismaBandStr);
@@ -1231,13 +1251,13 @@ function MembersPage() {
                                 <div
                                   className="flex items-center gap-2"
                                   onClick={
-                                    wikiHref
+                                    figureHref
                                       ? () => {
-                                          window.open(wikiHref, "_blank", "noopener,noreferrer");
+                                          window.open(figureHref, "_blank", "noopener,noreferrer");
                                         }
                                       : undefined
                                   }
-                                  style={{ cursor: wikiHref ? "pointer" : "default" }}
+                                  style={{ cursor: figureHref ? "pointer" : "default" }}
                                 >
                                   <div
                                     className={`h-7 w-7 shrink-0 overflow-hidden rounded-full ${imageUrl ? "bg-muted" : "bg-transparent"}`}
@@ -1248,7 +1268,7 @@ function MembersPage() {
                                       <div className="h-full w-full rounded-full border border-border/40 bg-muted/20" />
                                     )}
                                   </div>
-                                  <span className={wikiHref ? "hover:underline" : ""}>{name}</span>
+                                  <span className={figureHref ? "hover:underline" : ""}>{name}</span>
                                 </div>
                               </td>
                               <td className="px-3 py-2">
@@ -1362,6 +1382,29 @@ function MembersPage() {
                                     </div>
                                   </div>
                                 )}
+                              </td>
+                              <td className="px-3 py-2 text-right tabular-nums">
+                                {(() => {
+                                  const born = stats?.born_at_game_month ?? f.born_at_game_month;
+                                  const age = stats?.age_years ?? f.age_years;
+                                  const bornText = formatJoinDate(born);
+                                  const hasBorn = bornText !== "—";
+                                  const hasAge = typeof age === "number";
+                                  if (!hasBorn && !hasAge) {
+                                    return <span className="text-muted-foreground">—</span>;
+                                  }
+                                  return (
+                                    <span>
+                                      {hasBorn ? bornText : "—"}
+                                      {hasAge && (
+                                        <span className="text-muted-foreground">
+                                          {" "}
+                                          ({age} yr{age === 1 ? "" : "s"})
+                                        </span>
+                                      )}
+                                    </span>
+                                  );
+                                })()}
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums">
                                 {formatJoinDate(f.created_at_game_month)}
