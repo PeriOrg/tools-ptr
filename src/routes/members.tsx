@@ -1334,7 +1334,9 @@ function MembersPage() {
                                     ))}
                                   </div>
                                 ) : (
-                                  <span className="text-xs text-muted-foreground">Member</span>
+                                  <span className="text-xs text-muted-foreground cursor-pointer hover:underline" onClick={() => openRoleHistoryModal(f.id, name, stats)} title={`(click for history)`}>
+                                    Member
+                                  </span>
                                 )}
                               </td>
                               <td className="px-3 py-2">
