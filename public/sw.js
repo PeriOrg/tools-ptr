@@ -1,7 +1,7 @@
-const CACHE_VERSION = "ptr-tools-v1";
+const CACHE_VERSION = "ptr-tools-v2";
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const API_CACHE = `${CACHE_VERSION}-api`;
-const SHELL_ASSETS = ["/", "/manifest.webmanifest", "/icons/pwa-192.svg", "/icons/pwa-512.svg"];
+const SHELL_ASSETS = ["/", "/manifest.webmanifest", "/icons/logo.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)));

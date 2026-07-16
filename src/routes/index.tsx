@@ -9,6 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ChangelogDialog } from "@/components/ChangelogDialog";
+import { latestVersion } from "@/lib/changelog";
 
 const THEME_STORAGE_KEY = "ptr.theme.v1";
 type ThemeMode = "auto" | "light" | "dark";
@@ -20,6 +22,7 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   const { nations, nationsErr, nationId, setNationId } = useNation();
   const [themeMode, setThemeMode] = useState<ThemeMode>("auto");
+  const [changelogOpen, setChangelogOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -33,7 +36,9 @@ function HomePage() {
     if (typeof window === "undefined") return;
 
     const root = document.documentElement;
-    const isDark = mode === "dark" || (mode === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const isDark =
+      mode === "dark" ||
+      (mode === "auto" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
     root.classList.toggle("dark", isDark);
     root.style.colorScheme = isDark ? "dark" : "light";
@@ -51,23 +56,53 @@ function HomePage() {
     <main className="mx-auto max-w-[88rem] px-4 py-6 sm:px-6 sm:py-10">
       <header className="mb-10 flex items-start gap-6">
         <div className="flex-1">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">PR:R Tools</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            PR:R Tools
+          </h1>
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            A small collection of tools for PR:R: visualise election polling, create estimates, download the charts, compute parliamentary majorities, and browse party members across nations. Data comes live from <code className="text-xs">api.ptr.zanz2.dev</code>.
+            A small collection of tools for PR:R: visualise election polling, create estimates,
+            download the charts, compute parliamentary majorities, and browse party members across
+            nations. Data comes live from <code className="text-xs">api.ptr.zanz2.dev</code>.
           </p>
         </div>
         <img src={logo} alt="PR:R Logo" className="h-20 w-auto flex-shrink-0 object-contain" />
       </header>
 
       <section className="mb-12">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Tools</h2>
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+          Tools
+        </h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <ToolCard to="/nation" title="Nation" desc="See current holders of national offices, starting with Head of State." />
-          <ToolCard to="/polls" title="Polling" desc="Visualise national polls, projected seats and D'Hondt parliament estimates." />
-          <ToolCard to="/majority" title="Majority calculator" desc="Simulate Yes / Abstain / No votes to check simple, absolute and supermajorities." />
-          <ToolCard to="/members" title="Members" desc="Browse party internal positions and political figures (sign-in required)." />
-          <ToolCard to="/party-primary" title="Party Primary" desc="Model internal party elections with factions, turnout, and ranked-choice rounds." />
-          <ToolCard to="/political-contestation" title="Political Compass" desc="Condense all party ideology categories into a left-right / libertarian-authoritarian map." />
+          <ToolCard
+            to="/nation"
+            title="Nation"
+            desc="See current holders of national offices, starting with Head of State."
+          />
+          <ToolCard
+            to="/polls"
+            title="Polling"
+            desc="Visualise national polls, projected seats and D'Hondt parliament estimates."
+          />
+          <ToolCard
+            to="/majority"
+            title="Majority calculator"
+            desc="Simulate Yes / Abstain / No votes to check simple, absolute and supermajorities."
+          />
+          <ToolCard
+            to="/members"
+            title="Members"
+            desc="Browse party internal positions and political figures (sign-in required)."
+          />
+          <ToolCard
+            to="/party-primary"
+            title="Party Primary"
+            desc="Model internal party elections with factions, turnout, and ranked-choice rounds."
+          />
+          <ToolCard
+            to="/political-contestation"
+            title="Political Compass"
+            desc="Condense all party ideology categories into a left-right / libertarian-authoritarian map."
+          />
         </div>
       </section>
 
@@ -75,11 +110,16 @@ function HomePage() {
         <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
           Available countries
         </h2>
-        {nationsErr && <p className="text-sm text-destructive">Failed to load nations: {nationsErr}</p>}
+        {nationsErr && (
+          <p className="text-sm text-destructive">Failed to load nations: {nationsErr}</p>
+        )}
         {!nations && !nationsErr && (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-28 rounded-md border border-border bg-muted/30 animate-pulse" />
+              <div
+                key={i}
+                className="h-28 rounded-md border border-border bg-muted/30 animate-pulse"
+              />
             ))}
           </div>
         )}
@@ -91,7 +131,9 @@ function HomePage() {
                 key={n.id}
                 onClick={() => setNationId(n.id)}
                 className={`flex cursor-pointer flex-col items-center gap-2 rounded-md border bg-card p-3 text-left transition-colors hover:border-foreground/40 ${
-                  nationId === n.id ? "border-foreground ring-1 ring-foreground/20" : "border-border"
+                  nationId === n.id
+                    ? "border-foreground ring-1 ring-foreground/20"
+                    : "border-border"
                 }`}
               >
                 <div className="flex h-16 w-full items-center justify-center overflow-hidden rounded-sm">
@@ -106,7 +148,9 @@ function HomePage() {
                       }}
                     />
                   ) : (
-                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">No flag</span>
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      No flag
+                    </span>
                   )}
                 </div>
                 <div className="text-xs font-medium text-foreground text-center">{n.name}</div>
@@ -119,28 +163,43 @@ function HomePage() {
         )}
       </section>
 
-      <footer className="mt-12 flex flex-col gap-2 border-t border-border pt-5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-        <p>Theme preference</p>
-        <div className="w-full sm:w-[210px]">
-          <Select
-            value={themeMode}
-            onValueChange={(value) => {
-              const mode = value as ThemeMode;
-              setThemeMode(mode);
-              applyTheme(mode);
-            }}
+      <footer className="mt-12 flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-border pt-5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <span>Version</span>
+          <button
+            type="button"
+            onClick={() => setChangelogOpen(true)}
+            className="cursor-pointer rounded text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Open changelog"
           >
-            <SelectTrigger aria-label="Theme mode" className="h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="auto">Automatic (system)</SelectItem>
-              <SelectItem value="light">Light</SelectItem>
-              <SelectItem value="dark">Dark</SelectItem>
-            </SelectContent>
-          </Select>
+            v{latestVersion}
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span>Theme</span>
+          <div className="w-[180px]">
+            <Select
+              value={themeMode}
+              onValueChange={(value) => {
+                const mode = value as ThemeMode;
+                setThemeMode(mode);
+                applyTheme(mode);
+              }}
+            >
+              <SelectTrigger aria-label="Theme mode" className="h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Automatic (system)</SelectItem>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="dark">Dark</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </footer>
+
+      <ChangelogDialog open={changelogOpen} onOpenChange={setChangelogOpen} />
     </main>
   );
 }
